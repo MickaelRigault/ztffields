@@ -1,0 +1,13 @@
+numpy
+scipy
+matplotlib
+pandas
+
+shapely
+geopandas
+
+numpydoc
+sphinx-book-theme
+myst-nb
+nbsphinx
+sphinx_copybutton
