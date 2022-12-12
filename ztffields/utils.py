@@ -1,3 +1,18 @@
+"""
+utils
+------
+
+Useful tools used by the package.
+
+.. autosummary::
+
+   cart2sph
+   sph2cart
+   rot_xz
+   rot_xz_sph
+
+"""
+
 import numpy as np
 
 _DEG2RA = np.pi / 180

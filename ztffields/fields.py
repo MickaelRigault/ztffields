@@ -1,4 +1,17 @@
+"""
+fields
+------
 
+Module to handle ZTF Fields.
+
+.. autosummary::
+
+   Fields
+   fieldid_to_radec
+   spatialjoin_radec_to_fields
+   FieldProjection
+
+"""
 import pandas
 import numpy as np
 from shapely import geometry
@@ -20,11 +33,40 @@ class Fields( object ):
     FIELDS_RADEC = _FIELD_DATAFRAME[["RA","Dec"]].rename({"RA":"ra", "Dec":"dec"}, axis=1)
     CCD_COORDS = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_ccd_layout.tbl") ).rename(columns={"CCD ": "CCD"}) # strip
     QUAD_COORDS = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_ccd_quad_layout.tbl"))
+
+
+    def __init__(self, load_level=None):
+        """ """
+        if load_level is not None:
+            self.load_level_geometry(load_level)
+
+    def load_level_geometry(self, level):
+        """ """
+        level = np.atleast_1d(level)
+
+        if "focalplane" in level or "*" in level:
+            self._geodf_focalplane = self.get_field_geometry(level="focalplane")
+        if "ccd" in level or "*" in level:
+            self._geodf_ccd = self.get_field_geometry(level="ccd")
+        if "quadrant" in level or "*" in level:
+            self._geodf_quadrant = self.get_field_geometry(level="quadrant")
+
+    def get_level_geodf(self, level):
+        """ """
+        if level=="focalplane":
+            return self.geodf_focalplane
         
+        if level=="ccd":
+            return self.geodf_ccd
+        
+        if level=="quadrant":
+            return self.geodf_quadrant
+        
+        raise ValueError(f"{level} not implemented.")
+    
     # =============== #
     #   Methods       #
     # =============== #
-    
     @classmethod
     def get_field_centroids(cls, fieldid=None):
         """ get field central coordinates [ra,dec]
@@ -70,7 +112,7 @@ class Fields( object ):
         geopandas.GeoDataFrame
             geopandas GeoDataFrame containing the ['geometry'] columns.
             If level is ccd or quadrant, the dataframe has two level
-            of indexes (fieldid, ccdid/qid) ; only fieldid if level is focalplane.
+            of indexes (fieldid, ccdid/rcid) ; only fieldid if level is focalplane.
             
         See also
         --------
@@ -122,7 +164,7 @@ class Fields( object ):
         Returns
         -------
         dataframe, list
-            - the indexes (fieldid or (fieldid,ccdid/qid) dependning on level)
+            - the indexes (fieldid or (fieldid,ccdid/rcid) dependning on level)
             - the list of verticities ([steps, 2] or shapely.Polygon ; see as_polygon).
             
         See also
@@ -143,11 +185,11 @@ class Fields( object ):
             func = cls.get_ccd_contours
             index = [[fieldid,ccdid] for ccdid in np.arange(1,17) for fieldid in fieldids]
             index = pandas.DataFrame(index, columns=["fieldid","ccdid"])
-        # qid level            
-        elif level in ["quadrant","qid","quad"]:
+        # rcid level            
+        elif level in ["quadrant","rcid","quad"]:
             func = cls.get_quadrant_contours
-            index = [[fieldid,qid] for qid in np.arange(0,64) for fieldid in fieldids]
-            index = pandas.DataFrame(index, columns=["fieldid","qid"])
+            index = [[fieldid,rcid] for rcid in np.arange(0,64) for fieldid in fieldids]
+            index = pandas.DataFrame(index, columns=["fieldid","rcid"])
         else:
             raise ValueError(f"level {level} is not available. use: focalplane, ccd, quadrant")
             
@@ -193,14 +235,14 @@ class Fields( object ):
     # ---------- #
     # Quadrant    
     @classmethod    
-    def get_quadrant_contours(cls, qid=None, 
+    def get_quadrant_contours(cls, rcid=None, 
                             inrad=False, steps=5, 
                             ra=0, dec=0, as_polygon=False):
         """ get the quadrant contours.
         
         Parameters
         ----------
-        qid: int, list
+        rcid: int, list
             id of the quadrant (or list of).
             If None, all 64 quadrants will be used.
             
@@ -233,9 +275,9 @@ class Fields( object ):
         """
         upper_left_corner = cls.QUAD_COORDS.groupby("Quad").max()
         lower_right_corner = cls.QUAD_COORDS.groupby("Quad").min()
-        if qid is not None:
-            upper_left_corner = upper_left_corner.loc[qid]
-            lower_right_corner = lower_right_corner.loc[qid]
+        if rcid is not None:
+            upper_left_corner = upper_left_corner.loc[rcid]
+            lower_right_corner = lower_right_corner.loc[rcid]
             
         return cls._derive_corners_(upper_left_corner, lower_right_corner, 
                                     ra=ra, dec=dec,
@@ -392,3 +434,31 @@ class Fields( object ):
         if as_polygon:
             return cls._verts_to_polygon_(radec)
         return radec
+    
+    # =============== #
+    #   Properties    #
+    # =============== #
+    @property
+    def geodf_focalplane(self):
+        """ field geometry at the focal plane level """
+        if not hasattr(self,"_geodf_focalplane"):
+            self.load_level_geometry("focalplane")
+            
+        return self._geodf_focalplane
+    
+    @property
+    def geodf_ccd(self):
+        """ field geometry at the ccd level """
+        if not hasattr(self,"_geodf_ccd"):
+            self.load_level_geometry("ccd")
+            
+        return self._geodf_ccd
+
+    @property
+    def geodf_quadrant(self):
+        """ field geometry at the quadrant level """
+        if not hasattr(self,"_geodf_quadrant"):
+            self.load_level_geometry("quadrant")
+            
+        return self._geodf_quadrant
+    
