@@ -22,7 +22,7 @@ quadrant (64 polygons) levels.
 Sharp start
 ============
 
-**Get the fieldid and quadrant rcid that contains a given set of targets**
+**Get the fieldid that contains a given set of targets**
 
 .. code-block:: python
 
