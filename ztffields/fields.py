@@ -27,6 +27,22 @@ _FIELD_DATAFRAME = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_fields.txt")
 
 __all__ = ["Fields"]
 
+
+def get_grid_field(which):
+    """ """
+    fieldid = _FIELD_DATAFRAME.index.values
+    if which in ["main","Main","primary"]:
+        return fieldid[fieldid<880]
+    if which in ["aux","secondary", "auxiliary"]:
+       return fieldid[fieldid>999]
+    if which in ["all","*","both"]:
+        return fieldid
+        
+    raise ValueError(f"Cannot parse which field grid you want {which}")
+
+
+
+
 class Fields( object ):
     """ Interact or access ZTF Fields. """
     
@@ -183,12 +199,12 @@ class Fields( object ):
         # ccd level
         elif level in ["ccd","ccdid"]:
             func = cls.get_ccd_contours
-            index = [[fieldid,ccdid] for ccdid in np.arange(1,17) for fieldid in fieldids]
+            index = [[fieldid,ccdid] for fieldid in fieldids for ccdid in np.arange(1,17)]
             index = pandas.DataFrame(index, columns=["fieldid","ccdid"])
         # rcid level            
         elif level in ["quadrant","rcid","quad"]:
             func = cls.get_quadrant_contours
-            index = [[fieldid,rcid] for rcid in np.arange(0,64) for fieldid in fieldids]
+            index = [[fieldid,rcid] for fieldid in fieldids for rcid in np.arange(0,64)]
             index = pandas.DataFrame(index, columns=["fieldid","rcid"])
         else:
             raise ValueError(f"level {level} is not available. use: focalplane, ccd, quadrant")
