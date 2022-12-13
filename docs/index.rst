@@ -75,7 +75,7 @@ or ~4s (quadrant level)
 	fig = ztffields.skyplot_fields(fieldid_s)
 
 .. image:: _static/skyplot_random.png
-  :alt: Alternative text
+  :alt: Skyplot random
 
 .. toctree::
    :caption: Code documentation
