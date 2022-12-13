@@ -188,7 +188,9 @@ class FieldProjection( object ):
             
             if key is not None:
                 field_ = field_.str.split("_", expand=True).rename({0:"fieldid",1:key}, axis=1)
-                
+
+            field_ = field_.astype(int)
+            
         return field_ 
     
     def get_field_targets(self, explode=False):
@@ -205,7 +207,7 @@ class FieldProjection( object ):
             if key is not None:
                 targets = targets.join(targets.pop("fieldid").str.split("_", expand=True).rename(
                                         {0:"fieldid",1:key}, axis=1)).set_index(["fieldid",key])
-                
+                targets = targets.astype(int)
         return targets
     
     # - mid Level  

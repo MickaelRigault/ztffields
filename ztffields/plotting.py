@@ -313,7 +313,7 @@ class FieldFigure( object ):
             
         if ax is None:
             ax = self.add_axes(reset=True)
-            
+
         self._plotting["ax"] = ax
             
         #
@@ -343,7 +343,7 @@ class FieldFigure( object ):
             else:
                 _ = self.add_colorbar()
             
-        return self.figure
+        return self.ax.figure
     
     # =============== #
     #   add other     #
@@ -375,7 +375,8 @@ class FieldFigure( object ):
         """
         if cax is None:
             bboxax = self.ax.get_position()
-            cax = self.figure.add_axes([bboxax.xmin, ymin, bboxax.width, height])
+            fig = self.ax.figure
+            cax = fig.add_axes([bboxax.xmin, ymin, bboxax.width, height])
             
         vmin, vmax = self._plotting["vrange"]
         return colorbar(cax, self._plotting["cmap"], 
@@ -429,8 +430,8 @@ class FieldFigure( object ):
             cax, histax = cax
         else:
             bboxax = self.ax.get_position()
-            cax = self.figure.add_axes([bboxax.xmin, ymin, bboxax.width, height*(1-(hratio+gapratio))])
-            histax = self.figure.add_axes([bboxax.xmin, ymin+height*(1-hratio), bboxax.width, 
+            cax = self.ax.figure.add_axes([bboxax.xmin, ymin, bboxax.width, height*(1-(hratio+gapratio))])
+            histax = self.ax.figure.add_axes([bboxax.xmin, ymin+height*(1-hratio), bboxax.width, 
                                          height*hratio])
         
         vmin, vmax = self._plotting["vrange"]
