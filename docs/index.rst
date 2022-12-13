@@ -48,6 +48,15 @@ Sharp start
 	df = ztffields.radec_to_fieldid(radecs, level="focalplane")
 	df.loc[600] # see the fieldid and ccdid containing the target 600
 
+.. parsed-literal::
+   
+	# result
+	index_radec
+	600    1729
+	600     688
+	Name: fieldid, dtype: object
+
+	
 Matching 4000 targets takes: 300ms (focalplane level), ~1s (ccd-level)
 or ~4s (quadrant level)
 
@@ -63,9 +72,10 @@ or ~4s (quadrant level)
 	fieldid_s = fieldid_s[fieldid_s.index<1000]
 
 	# Display
-	_ = ztffields.skyplot_fields(fieldid_s)
+	fig = ztffields.skyplot_fields(fieldid_s)
 
-
+.. image:: _static/skyplot_random.png
+  :alt: Alternative text
 
 .. toctree::
    :caption: Code documentation
