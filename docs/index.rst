@@ -25,17 +25,47 @@ Sharp start
 **Get the fieldid and quadrant rcid that contains a given set of targets**
 
 .. code-block:: python
-		
-	np.random.seed(1234)
-	# generate 4000 RA, Dec coordinates.
-	radecs = pandas.DataFrame({"ra":np.random.uniform(-30, 90, size=4000),
-                           "dec":np.random.uniform(0, 150, size=4000)}
-                         )
-	df = ztffields.radec_to_fieldid(radecs, level="ccd") # ccd level
+
+	import numpy as np
+	import ztffields
+	
+	np.random.seed(1234) # seed
+	
+	# generate 4000 RA, Dec coordinates with some bounds
+	size = 40_000
+	dec_range = [-45, 90]
+	ra_range=[0,360]
+	
+	# -> random in the sky
+	dec_sin_range = np.sin(np.asarray(dec_range)*np.pi/180)
+	ra = np.random.uniform(*ra_range, size=size)
+	dec = np.arcsin( np.random.uniform(*dec_sin_range, size=size) ) / (np.pi/180)
+
+	# build a dataframe structure.
+	radecs = pandas.DataFrame({"ra":ra, "dec":dec})
+
+	# and project to a focalplane shape.
+	df = ztffields.radec_to_fieldid(radecs, level="focalplane")
 	df.loc[600] # see the fieldid and ccdid containing the target 600
 
 Matching 4000 targets takes: 300ms (focalplane level), ~1s (ccd-level)
 or ~4s (quadrant level)
+
+
+**Now display the number of target per main grid fields**
+
+.. code-block:: python
+
+	# groupby field id
+	fieldid_s = df.to_frame().groupby("fieldid").size()
+
+	# - and limit to the main grid
+	fieldid_s = fieldid_s[fieldid_s.index<1000]
+
+	# Display
+	_ = ztffields.skyplot_fields(fieldid_s)
+
+
 
 .. toctree::
    :caption: Code documentation
