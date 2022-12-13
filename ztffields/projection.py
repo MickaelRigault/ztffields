@@ -13,12 +13,13 @@ Project targets (ra, dec) into the fields.
 
 """
 
-
 import warnings
 import pandas
 import numpy as np
 #
 import geopandas
+from shapely import geometry
+
 #
 from .fields import Fields
 
@@ -144,6 +145,86 @@ def parse_fields(fields):
         raise ValueError("cannot parse the format of the input 'fields' variable. Should be dict, GeoSeries or GeoPandas")
 
     return fields
+
+
+def regions_to_shapely(region):
+    """ 
+    Parameters
+    ----------
+    region: str or Regions (see astropy-regions.readthedocs.io)
+        if str, it is assumed to be the dr9 ircs format 
+        e.g. region = box(40.00000000,50.00000000,5.00000000,4.00000000,0.00000000)
+        if Regions, region will be converted into the str format
+        using ``region = region.serialize("ds9").strip().split("\n")[-1]``
+        The following format have been implemented:
+        - box
+        - circle
+        - ellipse
+        - polygon
+        
+    Returns
+    -------
+    Shapely's Geometry
+        the geometry will depend on the input regions.
+        
+    Raises
+    ------
+    NotImplementedError
+        if the format is not recognised.
+        
+    Examples
+    --------
+    >>> shapely_ellipse = regions_to_shapely('ellipse(54,43.4, 4, 2,-10)')
+    >>> shapely_rotated_rectangle = regions_to_shapely('box(-30,0.4, 4, 2,80)')
+    """
+    import shapely
+    from shapely import geometry
+    
+    if "regions.shapes" in str(type(region)):
+        # Regions format -> dr9 icrs format
+        region = region.serialize("ds9").strip().split("\n")[-1]
+        
+    if (tregion:=type(region)) is not str:
+        raise ValueError(f"cannot parse the input region format ; {tregion} given")
+        
+    # it works, let's parse it.
+    which, params = region.replace(")","").split("(")
+    params = np.asarray(params.split(","), dtype="float")
+    
+    # Box, 
+    if which == "box": # rectangle
+        centerx, centery, width, height, angle = params
+        minx, miny, maxx, maxy = centerx-width, centery-height, centerx+width, centery+height
+        geom = geometry.box(minx, miny, maxx, maxy, ccw=True)
+        if angle != 0:
+            geom = shapely.affinity.rotate(geom, angle)
+            
+    # Cercle        
+    elif which == "circle":
+        centerx, centery, radius = params
+        geom = geometry.Point(centerx, centery).buffer(radius)
+        
+    # Ellipse
+    elif which == "ellipse":
+        centerx, centery, a, b, theta = params
+        # unity circle
+        geom = geometry.Point(centerx, centery).buffer(1)
+        geom = shapely.affinity.scale(geom, a,b)
+        if theta != 0:
+            geom = shapely.affinity.rotate(geom, theta)
+        
+    # Ellipse        
+    elif which == "polygon":
+        params = (params + 180) %360 - 180
+        coords = params.reshape(int(len(params)/2),2)
+        geom = geometry.Polygon(coords)
+        
+    else:
+        raise NotImplementedError(f"the {which} form not implemented. box, circle, ellpse and polygon are.")
+    
+    # shapely's geometry
+    return geom
+
 
 
 class FieldProjection( object ):
