@@ -45,9 +45,9 @@ Sharp start
 	# build a dataframe structure.
 	radecs = pandas.DataFrame({"ra":ra, "dec":dec})
 
-	# and project to a focalplane shape.
+	# and project to a focalplane shape | try using ccd or quadrant
 	df = ztffields.radec_to_fieldid(radecs, level="focalplane")
-	df.loc[600] # see the fieldid and ccdid containing the target 600
+	df.loc[600] # see the fieldid containing the target 600
 
 .. parsed-literal::
    
