@@ -1,0 +1,8 @@
+# Basics
+numpy
+pandas
+
+# Shapely
+shapely>=2.0
+geopandas
+

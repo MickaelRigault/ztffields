@@ -26,6 +26,7 @@ Sharp start
 
 .. code-block:: python
 
+	import pandas
 	import numpy as np
 	import ztffields
 	
