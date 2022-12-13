@@ -77,6 +77,10 @@ or ~4s (quadrant level)
 .. image:: _static/skyplot_random.png
   :alt: Skyplot random
 
+
+Documentation
+===============
+	
 .. toctree::
    :caption: Code documentation
    :titlesonly:
@@ -94,3 +98,5 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+.. _ztffields: https://ztffields.readthedocs.io/en/latest/index.html  
