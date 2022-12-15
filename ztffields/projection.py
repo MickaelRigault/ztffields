@@ -40,13 +40,11 @@ def fieldid_to_radec(radecs, level="focalplane", **kwargs):
     return FieldProjection.fieldid_to_radec(radecs, level=level, **kwargs)
 
 
-
 # ============== #
 #                #
 # Generic Tools  #
 #                #
 # ============== #
-
 def spatialjoin_radec_to_fields(radec, fields,
                                 how="inner", predicate="intersects",
                                 index_radec="index_radec", **kwargs):
@@ -78,7 +76,8 @@ def spatialjoin_radec_to_fields(radec, fields,
     #  Coords  #
     # -------- #
     if type(radec) in [np.ndarray, list, tuple]:
-        if (inshape:=np.shape(radec))[-1] != 2:
+        inshape = np.shape(radec)
+        if inshape[-1] != 2:
             raise ValueError(f"shape of radec must be (N, 2), {inshape} given.")
         
         radec = pandas.DataFrame(radec, columns=["ra","dec"])
@@ -96,9 +95,16 @@ def spatialjoin_radec_to_fields(radec, fields,
     # -------- #
     # Joining  #
     # -------- #
-    return geopoints.sjoin(fields,  how="inner", predicate="intersects", **kwargs)
+    sjoined = geopoints.sjoin(fields,  how="inner", predicate="intersects", **kwargs)
 
+    # multi-index
+    if type(fields.index) == pandas.MultiIndex:
+        sjoined = sjoined.rename({f"index_right{i}":name for i,name in enumerate(fields.index.names)}, axis=1)
+    else:
+        sjoined = sjoined.rename({f"index_right": fields.index.name}, axis=1)
 
+    return sjoined
+    
 def parse_fields(fields):
     """ read various formats for fields and returns it as a geodataframe
 
@@ -183,8 +189,9 @@ def regions_to_shapely(region):
     if "regions.shapes" in str(type(region)):
         # Regions format -> dr9 icrs format
         region = region.serialize("ds9").strip().split("\n")[-1]
-        
-    if (tregion:=type(region)) is not str:
+
+    tregion = type(region)
+    if tregion is not str:
         raise ValueError(f"cannot parse the input region format ; {tregion} given")
         
     # it works, let's parse it.
