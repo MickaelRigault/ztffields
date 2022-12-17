@@ -41,8 +41,6 @@ def get_grid_field(which):
     raise ValueError(f"Cannot parse which field grid you want {which}")
 
 
-
-
 class Fields( object ):
     """ Interact or access ZTF Fields. """
     

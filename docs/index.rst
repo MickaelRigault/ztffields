@@ -32,7 +32,7 @@ Sharp start
 	
 	np.random.seed(1234) # seed
 	
-	# generate 4000 RA, Dec coordinates with some bounds
+	# generate 40_000 RA, Dec coordinates with some bounds
 	size = 40_000
 	dec_range = [-45, 90]
 	ra_range=[0,360]
@@ -58,9 +58,11 @@ Sharp start
 	Name: fieldid, dtype: object
 
 	
-Matching 4000 targets takes: 300ms (focalplane level), ~1s (ccd-level)
-or ~4s (quadrant level)
-
+Performance wise, on a regular laptop, matching 10_000 targets takes:
+    - 300ms at the focalplane level)
+    - 1.7s at the ccd level
+    - 4.8s at the quadrant level
+ 
 
 **Now display the number of target per main grid fields**
 
@@ -77,6 +79,23 @@ or ~4s (quadrant level)
 
 .. image:: _static/skyplot_random.png
   :alt: Skyplot random
+
+
+**Tweack how to display**
+
+.. code-block:: python
+
+	# change the plotting system,
+	# add a label
+	# change the colormap
+	fig = ztffields.skyplot_fields(fieldid_s, 
+                               system="galactic", 
+                               label="number of observations",
+                               cmap="inferno_r")
+
+.. image:: _static/skyplot_random_galactic.png
+  :alt: Skyplot random galactic
+
 
 
 Documentation

@@ -66,7 +66,7 @@ def colorbar(ax, cmap, vmin=0, vmax=1, label="",
 #  FieldFigure   #
 #                #
 # -------------- #
-def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", **kwargs):
+def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", system="icrs", **kwargs):
     """ 
     
     Parameters
@@ -88,6 +88,12 @@ def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", **kwargs):
         - quadrant: 1 polygon per quadrant (64 per per footprint then)
         ccd and quadrant level will account for gaps between the CCDs.
     
+    system: str
+        coordinates system: 
+        - icrs (ra, dec)
+        - galactic (l, b)
+
+
     **kwargs goes to FieldFigure.skyplot_fields | e.g. add_mw, colorbar, edgecolor etc.
 
     Returns
@@ -99,7 +105,7 @@ def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", **kwargs):
 
 class FieldFigure( object ):
 
-    def __init__(self, figsize=(7,4), level="focalplane", **kwargs):
+    def __init__(self, figsize=(7,4), level="focalplane", system="icrs", origin=180, **kwargs):
         """ 
         
         Parameters
@@ -120,17 +126,63 @@ class FieldFigure( object ):
         None
         """
         self._geodf = Fields.get_field_geometry(level=level, **kwargs)
-        self._geodf["xy"] = self._geodf["geometry"].apply(lambda x: (np.asarray(x.exterior.xy)*np.pi/180).T- [np.pi,0])
+        self.set_system(system, origin=origin)
+        
         import matplotlib.pyplot as plt
         self._figure = plt.figure(figsize=(7,4))
         self._plotting = {}
 
 
+    def set_system(self, system="icrs", origin=180):
+        """ set the plotting coordinate system.
+
+        Parameters
+        ----------
+        system: str
+            coordinates system: 
+            - icrs (ra, dec)
+            - galactic (l, b)
+
+        origin: float
+            where the center is (left is origin from 0)
+            180 means that coordinates goes from -180->180
+            
+        Returns
+        -------
+        None
+        """
+        xy_icrs = np.stack(self._geodf["geometry"].apply(lambda x: ((np.asarray(x.exterior.xy)).T) ).values)
+        if system == "icrs":
+            xy = xy_icrs
+        else:
+            from astropy import coordinates, units            
+            shape_ = xy_icrs.shape
+            new_shape = np.prod(shape_[:-1]), shape_[-1]
+            icrs = coordinates.ICRS( *xy_icrs.reshape(new_shape).T*units.degree )
+            if system == "galactic":
+                # Create a ICRS object and convert it to galactic coords
+                gal = icrs.transform_to(coordinates.Galactic())
+                # avoids edge effect.
+                xy = np.asarray([gal.l.value, gal.b.value]).T.reshape(shape_)
+                
+            else:
+                raise NotImplemented(f"'{system}' has not been implemented")
+
+        # identify and correct edge effects
+        flag_egde = np.any(np.diff(xy, axis=1)>300, axis=1)[:,0]
+        xy[flag_egde] = ((xy[flag_egde] + origin)%360 - origin)
+
+        xy -= [origin,0] # set the origin
+        xy *= np.pi/180 # in radian
+        self._geodf["xy"] = list(xy)
+        self._system = system
+        
     # =============== #
     #   Class method  #
     # =============== #    
     @classmethod
     def skyplot_fields(cls, fieldid, figsize=(7,4), level="focalplane",
+                           system="icrs", projection="mollweide",
                            add_mw=True, mwcolor = "k", mwb=5,
                            colorbar="hist", facealpha=0.9, edgecolor="None",
                            bins=None, **kwargs):
@@ -157,6 +209,16 @@ class FieldFigure( object ):
             - quadrant: 1 polygon per quadrant (64 per per footprint then)
             ccd and quadrant level will account for gaps between the CCDs.
     
+        system: str
+            coordinates system: 
+            - icrs (ra, dec)
+            - galactic (l, b)
+
+        projection : {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
+            The projection type of the `~.axes.Axes`. *str* is the name of
+            a custom projection, see `~matplotlib.projections`. The default
+            None results in a 'rectilinear' projection.
+
         add_mw: bool
             should the Milky Way location be indicated
 
@@ -188,11 +250,18 @@ class FieldFigure( object ):
         -------
         figure
         """
-        figfield = cls(figsize=figsize, level=level)
-        ax = figfield.add_axes() 
+        # Create figure and the plotting system        
+        figfield = cls(figsize=figsize, level=level, system=system)
+        
+        # Create the axes
+        ax = figfield.add_axes(projection=projection)
+        
+        # Draw the fields as matplolib's polygon
         _ = figfield.plot_sky(ax=ax, fieldid=fieldid,
-                                  facealpha=facealpha, edgecolor=edgecolor,
-                                colorbar=colorbar, bins=bins, **kwargs)
+                              facealpha=facealpha, edgecolor=edgecolor,
+                              colorbar=colorbar, bins=bins, **kwargs)
+        
+        # Add the Milky way if wanted.
         if add_mw:
             _ = figfield.add_milkyway(color=mwcolor, b=mwb)
 
@@ -201,8 +270,9 @@ class FieldFigure( object ):
     # =============== #
     #   add other     #
     # =============== #
-    def add_axes(self, rect=[0.15,0.2,0.75,0.75], projection="mollweide", 
-                 reset=False, **kwargs):
+    def add_axes(self, rect=[0.15,0.22,0.75,0.75],
+                     projection="mollweide", 
+                     reset=False, **kwargs):
         """ add an axes
         
         Parameters
@@ -211,7 +281,7 @@ class FieldFigure( object ):
             The dimensions [left, bottom, width, height] of the new Axes. All
             quantities are in fractions of figure width and height.
 
-        projection : {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}, optional
+        projection : {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
             The projection type of the `~.axes.Axes`. *str* is the name of
             a custom projection, see `~matplotlib.projections`. The default
             None results in a 'rectilinear' projection.
@@ -242,9 +312,9 @@ class FieldFigure( object ):
     #     Main        #
     # =============== #        
     def plot_sky(self, fieldid=None, ax=None, 
-                 facecolors=None, 
+                 facecolors=None, system=None,
                  cmap="cividis", bins=None, vmin=None, vmax=None,
-                 facealpha=None, colorbar=None,
+                 facealpha=None, colorbar=None, label=None,
                  **kwargs):
         """ Plot fields on a 2d sky projection
         
@@ -266,12 +336,17 @@ class FieldFigure( object ):
             value used to build the patches color. 
             len of facecolors must match len of fieldid.
         
-        bins: int
-            sequencing of the colormap. 'lut' in matplotlib's get_cmap()
-        
+        system: str
+            coordinates system: 
+            - icrs (ra, dec)
+            - galactic (l, b)
+
         cmap: matplotlib.Colormap or str
             if str: a name of a colormap known to Matplotlib.
             
+        bins: int
+            sequencing of the colormap. 'lut' in matplotlib's get_cmap()
+        
         vmin: float
             minimal value for the colormap
             
@@ -288,7 +363,10 @@ class FieldFigure( object ):
             should this add a colorbar and which ?
             - colorbar='hist': histcolorbar
             - else, if not None: colorbar
-        
+
+        label: str
+            label of the colorbar
+
         Returns
         -------
         figure
@@ -304,10 +382,13 @@ class FieldFigure( object ):
         if type(fieldid) == pandas.Series:
             facecolors = fieldid.values
             fieldid = fieldid.index
+
+        if system is not None:
+            self.set_system(system)
             
         import matplotlib.pyplot as plt
 
-        fieldverts = self.geodf[["xy"]]
+        fieldverts = self.geodf[["xy"]].copy()            
         if fieldid is not None:
             fieldverts = fieldverts.loc[fieldid]
             
@@ -339,16 +420,18 @@ class FieldFigure( object ):
         _ = self._show_fieldverts(fieldverts, ax=self.ax, **kwargs)
         if colorbar is not None:
             if type(colorbar) is str and "hist" in colorbar:
-                _ = self.add_histcolorbar()
+                cbar,_ = self.add_histcolorbar()
             else:
-                _ = self.add_colorbar()
+                cbar = self.add_colorbar()
+            if label is not None:
+                cbar.set_label(label, fontsize="large")
             
         return self.ax.figure
     
     # =============== #
     #   add other     #
     # =============== #    
-    def add_colorbar(self, cax=None, ymin=0.1, height=0.04, **kwargs):
+    def add_colorbar(self, cax=None, ymin=0.15, height=0.04, **kwargs):
         """ add a colorbar
         
         This call colobar()
@@ -383,7 +466,7 @@ class FieldFigure( object ):
                         vmin=vmin, vmax=vmax, **kwargs)
         
     def add_histcolorbar(self, cax=None, bins=None,
-                            ymin=0.1, height=0.06, hratio=0.7, gapratio=0.05,
+                            ymin=0.15, height=0.06, hratio=0.7, gapratio=0.05,
                             histalpha=None, **kwargs):
         """ add a colorbar with histogram on top.
         
@@ -461,7 +544,7 @@ class FieldFigure( object ):
         histax.axis("off")
         return cbar, _
         
-    def add_milkyway(self, b=5, nbins=100, l_start=-241, l_stop=116, **kwargs):
+    def add_milkyway(self, b=5, nbins=300, l_start=-241, l_stop=116, **kwargs):
         """ add the milky way location on the main axes' figure (self.ax)
         
         Parameters
@@ -481,24 +564,38 @@ class FieldFigure( object ):
         -------
         output of ax.plot or ax.fill_between
         """
-        from astropy import coordinates, units
-        if b is None:
-            gal = coordinates.Galactic(np.linspace(l_start,l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
-                                           ).transform_to(coordinates.ICRS)
-            prop = dict(ls="-", color="0.7", alpha=0.5)
-            _ = self.ax.plot(*self._radec_to_plot(gal.ra, gal.dec), **{**prop, **kwargs})
-            
-        else:
-            gal_dw = coordinates.Galactic(np.linspace(l_start,l_stop,100)*units.deg, +b*np.ones(nbins)*units.deg
-                                         ).transform_to(coordinates.ICRS())
-            gal_up = coordinates.Galactic(np.linspace(l_start,l_stop,100)*units.deg, -b*np.ones(nbins)*units.deg
-                                         ).transform_to(coordinates.ICRS())
-            ra_dw,dec_dw = self._radec_to_plot(gal_dw.ra, gal_dw.dec)
-            ra_up,dec_up = self._radec_to_plot(gal_up.ra, gal_up.dec)
+        prop_line = dict(ls="-", color="0.7", alpha=0.5)
+        prop_band = dict(facecolor="0.7", alpha=0.2)
+        
+        # l, b
+        if self.system == "galactic":
+            if b is None:
+                _ = self.ax.axhline(0, **{**prop_line, **kwargs})
+            else:
+                _ = self.ax.axhspan(-b*np.pi/180, b*np.pi/180, **{**prop_band,**kwargs})
+        # RA Dec
+        elif self.system == "icrs":
+            from astropy import coordinates, units
+            if b is None:
+                gal = coordinates.Galactic( np.linspace(l_start,l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
+                                                ).transform_to(coordinates.ICRS)
 
-            prop = dict(facecolor="0.7", alpha=0.2)
-            _ = self.ax.fill_between(ra_dw, dec_dw, dec_up, **{**prop, **kwargs})
-    
+                _ = self.ax.plot(*self._radec_to_plot(gal.ra, gal.dec), **{**prop_line, **kwargs})
+            
+            else:
+                gal_dw = coordinates.Galactic(np.linspace(l_start,l_stop,nbins)*units.deg,
+                                                  +b*np.ones(nbins)*units.deg
+                                                  ).transform_to(coordinates.ICRS())
+                gal_up = coordinates.Galactic(np.linspace(l_start,l_stop,nbins)*units.deg,
+                                                  -b*np.ones(nbins)*units.deg
+                                                  ).transform_to(coordinates.ICRS())
+                ra_dw,dec_dw = self._radec_to_plot(gal_dw.ra, gal_dw.dec)
+                ra_up,dec_up = self._radec_to_plot(gal_up.ra, gal_up.dec)
+
+                _ = self.ax.fill_between(ra_dw, dec_dw, dec_up, **{**prop_band, **kwargs})
+        else:
+            raise NotImplementedError("Milky way plotting has not been implemented for the current system '{self.system}'")
+        
         return _
 
     # =============== #
@@ -519,13 +616,14 @@ class FieldFigure( object ):
     
     def _show_fieldverts(self, fieldverts, ax, **kwargs):
         """ """
-        from matplotlib.patches import Polygon        
+        from matplotlib.patches import Polygon
         patches = [Polygon(**v_.to_dict(), **kwargs) for i_, v_ in fieldverts.iterrows()]
         return [self.ax.add_patch(patch_) for patch_ in patches]
         
     def _radec_to_plot(self, ra, dec, origin=180):
         """ """
-        return np.asarray([-(np.asarray(ra)-origin)*np.pi/180, np.asarray(dec)*np.pi/180])
+        return np.asarray([(np.asarray(ra)-origin)* np.pi/180, np.asarray(dec)* np.pi/180]) 
+    
 
     def _build_histrogram(self, data, bins=None, **kwargs):
         """ """
@@ -558,3 +656,8 @@ class FieldFigure( object ):
         """ """
         return self._plotting.get("ax", None)
                               
+
+    @property
+    def system(self):
+        """ coordinate system (icrs, galactic etc.) """
+        return self._system
