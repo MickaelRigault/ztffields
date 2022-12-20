@@ -65,7 +65,7 @@ def colorbar(ax, cmap, vmin=0, vmax=1, label="",
 #                #
 # -------------- #
 def skyplot_fields(fieldid, figsize=(7,4), level="focalplane",
-                       system="icrs", projection="mollweide", **kwargs):
+                       system="icrs", projection=None, **kwargs):
     """ 
     
     Parameters
@@ -198,7 +198,7 @@ class FieldFigure( object ):
     # =============== #    
     @classmethod
     def skyplot_fields(cls, fieldid, figsize=(7,4), level="focalplane",
-                           system="icrs", projection="mollweide",
+                           system="icrs", projection=None,
                            add_mw=True, mwcolor = "k", mwb=5,
                            colorbar="hist", facealpha=0.9, edgecolor="None",
                            bins=None, **kwargs):
@@ -291,7 +291,7 @@ class FieldFigure( object ):
     #   add other     #
     # =============== #
     def add_axes(self, rect=[0.15,0.22,0.75,0.75],
-                     projection="mollweide", 
+                     projection=None, 
                      reset=False, **kwargs):
         """ add an axes
         
@@ -302,6 +302,9 @@ class FieldFigure( object ):
             quantities are in fractions of figure width and height.
 
         projection : matplotlib's string or cartopy.
+            - if None:
+               if cartopy is installed this will use mollweide from cartopy
+               else from matplotlib.
             - if matplotlib:
             {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
             The projection type of the `~.axes.Axes`. *str* is the name of
@@ -330,6 +333,13 @@ class FieldFigure( object ):
             import matplotlib.pyplot as plt
             self._figure = plt.figure(figsize=(7,4))
 
+        if projection is None:
+            try:
+                import cartopy.crs as ccrs
+                projection = ccrs.Mollweide()
+            except ImportError:
+                projection = "mollweide"
+            
         # check if input projection is from cartopy
         self._is_cartopy = "cartopy" in str( type(projection) )
         
