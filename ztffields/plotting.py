@@ -4,9 +4,7 @@ import numpy as np
 
 from .fields import Fields
 
-
 __all__ = ["skyplot_fields"]
-
 
 def values_to_color(value, cmap, vmin=None, vmax=None, alpha=None):
     """ """
