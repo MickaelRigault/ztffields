@@ -66,7 +66,8 @@ def colorbar(ax, cmap, vmin=0, vmax=1, label="",
 #  FieldFigure   #
 #                #
 # -------------- #
-def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", system="icrs", **kwargs):
+def skyplot_fields(fieldid, figsize=(7,4), level="focalplane",
+                       system="icrs", projection="mollweide", **kwargs):
     """ 
     
     Parameters
@@ -93,7 +94,15 @@ def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", system="icrs", **
         - icrs (ra, dec)
         - galactic (l, b)
 
-
+    projection : matplotlib's string or cartopy.
+        - if matplotlib:
+        {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
+        The projection type of the `~.axes.Axes`. *str* is the name of
+        a custom projection, see `~matplotlib.projections`. The default
+        None results in a 'rectilinear' projection.
+        - if cartopy:
+        any of the cartopy project from cartopy.crs.
+            
     **kwargs goes to FieldFigure.skyplot_fields | e.g. add_mw, colorbar, edgecolor etc.
 
     Returns
@@ -101,7 +110,8 @@ def skyplot_fields(fieldid, figsize=(7,4), level="focalplane", system="icrs", **
     `matplotlib.figure`
     
     """
-    return FieldFigure.skyplot_fields(fieldid, figsize=figsize, level=level, **kwargs)
+    return FieldFigure.skyplot_fields(fieldid, figsize=figsize, level=level,
+                                          system=system, projection=projection, **kwargs)
 
 class FieldFigure( object ):
 
@@ -151,6 +161,11 @@ class FieldFigure( object ):
         -------
         None
         """
+        if hasattr(self,"_is_cartopy") and self._is_cartopy:
+            is_cartopy = True
+        else:
+            is_cartopy = False
+
         xy_icrs = np.stack(self._geodf["geometry"].apply(lambda x: ((np.asarray(x.exterior.xy)).T) ).values)
         if system == "icrs":
             xy = xy_icrs
@@ -166,16 +181,19 @@ class FieldFigure( object ):
                 xy = np.asarray([gal.l.value, gal.b.value]).T.reshape(shape_)
                 
             else:
-                raise NotImplemented(f"'{system}' has not been implemented")
+                raise NotImplementedError(f"'{system}' has not been implemented")
 
         # identify and correct edge effects
         flag_egde = np.any(np.diff(xy, axis=1)>300, axis=1)[:,0]
         xy[flag_egde] = ((xy[flag_egde] + origin)%360 - origin)
 
-        xy -= [origin,0] # set the origin
-        xy *= np.pi/180 # in radian
+        if not is_cartopy:
+            xy -= [origin,0] # set the origin
+            xy *= np.pi/180 # in radian
+            
         self._geodf["xy"] = list(xy)
         self._system = system
+        self._origin = origin
         
     # =============== #
     #   Class method  #
@@ -214,10 +232,14 @@ class FieldFigure( object ):
             - icrs (ra, dec)
             - galactic (l, b)
 
-        projection : {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
+        projection : matplotlib's string or cartopy.
+            - if matplotlib:
+            {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
             The projection type of the `~.axes.Axes`. *str* is the name of
             a custom projection, see `~matplotlib.projections`. The default
             None results in a 'rectilinear' projection.
+            - if cartopy:
+            any of the cartopy project from cartopy.crs.
 
         add_mw: bool
             should the Milky Way location be indicated
@@ -281,10 +303,14 @@ class FieldFigure( object ):
             The dimensions [left, bottom, width, height] of the new Axes. All
             quantities are in fractions of figure width and height.
 
-        projection : {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
+        projection : matplotlib's string or cartopy.
+            - if matplotlib:
+            {None, 'aitoff', 'hammer', 'lambert', 'mollweide', 'polar', 'rectilinear', str}
             The projection type of the `~.axes.Axes`. *str* is the name of
             a custom projection, see `~matplotlib.projections`. The default
             None results in a 'rectilinear' projection.
+            - if cartopy:
+            any of the cartopy project from cartopy.crs.
 
         reset: bool
             Should this reset the current plotting ?
@@ -305,8 +331,18 @@ class FieldFigure( object ):
         if not hasattr(self,"_figure") or self.figure is None:
             import matplotlib.pyplot as plt
             self._figure = plt.figure(figsize=(7,4))
+
+        # check if input projection is from cartopy
+        self._is_cartopy = "cartopy" in str( type(projection) )
         
-        return self.figure.add_axes(rect, projection=projection, **kwargs)
+        ax = self.figure.add_axes(rect, projection=projection, **kwargs)
+
+        if self._is_cartopy:
+            self._projection = projection
+            ax.set_global()
+            self.set_system(self._system)
+            
+        return ax
     
     # =============== #
     #     Main        #
@@ -564,8 +600,35 @@ class FieldFigure( object ):
         -------
         output of ax.plot or ax.fill_between
         """
+        from astropy import coordinates, units
+        
         prop_line = dict(ls="-", color="0.7", alpha=0.5)
         prop_band = dict(facecolor="0.7", alpha=0.2)
+
+        # Cartopy
+        
+        if self._is_cartopy:
+                
+            from shapely.geometry import LineString
+            import cartopy.crs as ccrs
+            if b is None or b==0:
+                b = 1
+
+            long_, lat_ = np.linspace(l_start,l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
+            if self.system == "icrs":
+                gal = coordinates.Galactic( long_, lat_ ).transform_to(coordinates.ICRS)
+                ggal = LineString( zip(gal.ra.value, gal.dec.value) ).buffer(b)
+            elif self.system == "galactic":
+                ggal = LineString( zip(long_.value, lat_.value) ).buffer(b)
+            else:
+                raise NotImplementedError("Milky way plotting has not been implemented for the current system '{self.system}'")
+            
+            return self.ax.add_geometries([ggal], ccrs.PlateCarree(central_longitude=self._origin),
+                                  **{**prop_band, **kwargs})
+            
+
+
+        # Matplotlib
         
         # l, b
         if self.system == "galactic":
@@ -575,7 +638,7 @@ class FieldFigure( object ):
                 _ = self.ax.axhspan(-b*np.pi/180, b*np.pi/180, **{**prop_band,**kwargs})
         # RA Dec
         elif self.system == "icrs":
-            from astropy import coordinates, units
+            
             if b is None:
                 gal = coordinates.Galactic( np.linspace(l_start,l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
                                                 ).transform_to(coordinates.ICRS)
@@ -617,12 +680,23 @@ class FieldFigure( object ):
     def _show_fieldverts(self, fieldverts, ax, **kwargs):
         """ """
         from matplotlib.patches import Polygon
+        if self._is_cartopy:
+            import cartopy.crs as ccrs
+            kwargs["transform"] = ccrs.PlateCarree(central_longitude=self._origin)
+            
         patches = [Polygon(**v_.to_dict(), **kwargs) for i_, v_ in fieldverts.iterrows()]
         return [self.ax.add_patch(patch_) for patch_ in patches]
         
-    def _radec_to_plot(self, ra, dec, origin=180):
+    def _radec_to_plot(self, ra, dec):
         """ """
-        return np.asarray([(np.asarray(ra)-origin)* np.pi/180, np.asarray(dec)* np.pi/180]) 
+        if self._is_cartopy:
+            coef = 1
+            origin = 0
+        else:
+            coef = np.pi/180
+            origin = self._origin
+            
+        return np.asarray([(np.asarray(ra) - origin)* coef, np.asarray(dec)* coef]) 
     
 
     def _build_histrogram(self, data, bins=None, **kwargs):
