@@ -88,10 +88,13 @@ Performance wise, on a regular laptop, matching 10_000 targets takes:
 	# change the plotting system,
 	# add a label
 	# change the colormap
+	# using a cartopy projection
+	import cartopy.crs as ccrs
 	fig = ztffields.skyplot_fields(fieldid_s, 
                                system="galactic", 
                                label="number of observations",
-                               cmap="inferno_r")
+                               cmap="inferno_r",
+			       projection=ccrs.Robinson())
 
 .. image:: _static/skyplot_random_galactic.png
   :alt: Skyplot random galactic
