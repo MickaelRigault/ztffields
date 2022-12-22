@@ -73,9 +73,9 @@ def rot_xz(vec, theta):
     array
         rotated x, y, z
     """
-    return np.asarray([vec[0]*np.cos(theta*_DEG2RA) - vec[2]*np.sin(theta*_DEG2RA),
-                       vec[1][None,:],
-                       vec[2]*np.cos(theta*_DEG2RA) + vec[0]*np.sin(theta*_DEG2RA)])
+    return [vec[0]*np.cos(theta*_DEG2RA) - vec[2]*np.sin(theta*_DEG2RA),
+            vec[1][None,:],
+            vec[2]*np.cos(theta*_DEG2RA) + vec[0]*np.sin(theta*_DEG2RA)]
 
 def rot_xz_sph(l, b, theta):
     """ Rotate spherical coordinate (l,b = theta, phi) by angle theta around axis (0,1,0)
