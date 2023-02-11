@@ -186,6 +186,7 @@ class FieldFigure( object ):
         xy[flag_egde] = ((xy[flag_egde] + origin)%360 - origin)
 
         if not is_cartopy:
+            
             xy -= [origin,0] # set the origin
             xy *= np.pi/180 # in radian
             

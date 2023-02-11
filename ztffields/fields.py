@@ -41,12 +41,28 @@ def get_grid_field(which):
     raise ValueError(f"Cannot parse which field grid you want {which}")
 
 
+def get_layout(level):
+    """ """
+    if level.lower() == "ccd":
+        layout = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_ccd_layout.tbl")
+                              ).rename(columns={"CCD ": "CCD"}) # strip
+    elif level.lower() == "quadrant":
+        layout = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_ccd_quad_layout.tbl"))
+        layout["EW"] *= -1 # error on the file
+    else:
+        raise NotImplementedError(f"only ccd and quadrant layout implemented. {level} given")
+    
+    return layout
+        
+        
+
+
 class Fields( object ):
     """ Interact or access ZTF Fields. """
     
     FIELDS_RADEC = _FIELD_DATAFRAME[["RA","Dec"]].rename({"RA":"ra", "Dec":"dec"}, axis=1)
-    CCD_COORDS = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_ccd_layout.tbl") ).rename(columns={"CCD ": "CCD"}) # strip
-    QUAD_COORDS = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_ccd_quad_layout.tbl"))
+    CCD_COORDS = get_layout("ccd")
+    QUAD_COORDS = get_layout("quadrant")
 
 
     def __init__(self, load_level=None):
@@ -395,6 +411,8 @@ class Fields( object ):
     # =============== #
     #    Internal     #
     # =============== #
+    
+
     @staticmethod
     def _verts_to_polygon_(verts):
         """ """
@@ -415,9 +433,9 @@ class Fields( object ):
         """ """
         
         ewmin = -np.atleast_1d(upper_left_corner["EW"])
-        nsmax = np.atleast_1d(upper_left_corner["NS"])
+        nsmax = +np.atleast_1d(upper_left_corner["NS"])
         ewmax = -np.atleast_1d(lower_right_corner["EW"])
-        nsmin = np.atleast_1d(lower_right_corner["NS"])
+        nsmin = +np.atleast_1d(lower_right_corner["NS"])
 
         ra1  = (np.linspace(ewmax, ewmin, steps)/np.cos(nsmax*_DEG2RA)).T
         dec1 = (np.ones((steps,1))*nsmax).T

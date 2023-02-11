@@ -48,7 +48,7 @@ def fieldid_to_radec(radecs, level="focalplane", **kwargs):
 def spatialjoin_radec_to_fields(radec, fields,
                                 how="inner", predicate="intersects",
                                 index_radec="index_radec", **kwargs):
-    """ 
+    """ join the radecs with the fields
 
     Parameters
     ----------
@@ -288,8 +288,10 @@ class FieldProjection( object ):
             targets = targets.reset_index().explode("index_radec")
             if self.level=="ccd":
                 key = "ccdid"
+                
             elif self.level=="quadrant":
                 key = "rcid"
+                
             else:
                 key = None
             if key is not None:
