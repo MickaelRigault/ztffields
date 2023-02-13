@@ -4,7 +4,7 @@ import numpy as np
 
 from .fields import Fields
 
-__all__ = ["skyplot_fields"]
+__all__ = ["skyplot_fields", "show_ztf_footprint"]
 
 def values_to_color(value, cmap, vmin=None, vmax=None, alpha=None):
     """ """
@@ -59,6 +59,90 @@ def colorbar(ax, cmap, vmin=0, vmax=1, label="",
         
     return c_bar
 
+
+
+# -------------- #
+#                #
+#  FootPring     #
+#                #
+# -------------- #
+
+def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
+                           ccd_color="k", focalplane_color="0.7"):
+    """ displays the ZTF footprind 
+
+    Parameters
+    ----------
+    ccdid: int, list, None
+        if of the specific CCD(s) you want to display.
+        None means all.
+
+    fieldid: int
+        provide a fieldid. The footprint will be 
+        that of this field. If None, the camera 
+        footprint will be at ra=0, dec=0.
+
+    Returns
+    -------
+    figure
+        
+    """
+    from .utils import ccdid_qid_to_rcid
+    from matplotlib.patches import Polygon
+
+    # consider as iterable for what comes next
+    if ccdid is None:
+        ccdids = np.arange(1,17)
+    else:
+        ccdids = np.atleast_1d(ccdid)
+
+    if fieldid is None:
+        ra, dec = 0,0
+    else:
+        ra, dec = Fields.get_field_centroids(fieldid).values
+        
+    # Figure
+    if ax is None:
+        import matplotlib.pyplot as plt
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+    else:
+        fig = ax.figure
+
+    
+    # Focal Plane
+    fp = Fields.get_focalplane_contours(ra=ra, dec=dec)
+    polyfp = Polygon(fp, facecolor="None", edgecolor=focalplane_color,
+                         zorder=6, lw=1)
+    ax.add_patch(polyfp)
+
+    # Loops over the quadrant inside the CCDS
+    # to make sure that they match as they should.
+    # (it enabled a orientation debug, see get_layout())
+    
+    # CCD
+    for ccdid in ccdids:
+        ccd = Fields.get_ccd_contours(ccdid, ra=ra, dec=dec)
+        polyccd = Polygon(ccd, facecolor="None", edgecolor="k", zorder=5, lw=2)
+        ax.add_patch(polyccd)
+        #centroid_ = 
+        ax.text(*np.mean(ccd, axis=0), f"{ccdid}", va="center", ha="center", 
+                color=ccd_color,zorder=5, weight="bold")
+        
+        # it's quadrants
+        rcids = ccdid_qid_to_rcid(ccdid, np.arange(1,5))
+        for i, rcid in enumerate(rcids):
+            qad = Fields.get_quadrant_contours(rcid, ra=ra, dec=dec)
+            polyqad = Polygon(qad, facecolor=f"C{i}", edgecolor="None", zorder=3, alpha=0.6)
+            ax.add_patch(polyqad)
+            centroid_ = np.mean(qad, axis=0)
+            ax.text(*centroid_, f"{rcid+1}", va="center", ha="center", 
+                    color="w", zorder=4, fontsize="x-small")
+
+
+    ax.set_xlim(-5+ra,5+ra)
+    ax.set_ylim(-5+dec,5+dec)
+    return fig
 # -------------- #
 #                #
 #  FieldFigure   #

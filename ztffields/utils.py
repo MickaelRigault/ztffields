@@ -96,3 +96,13 @@ def rot_xz_sph(l, b, theta):
     """
     v_rot = rot_xz( sph2cart([1,l,b]), theta)
     return cart2sph(v_rot)[1:]
+
+def ccdid_qid_to_rcid(ccdid, qid):
+    """ provides the rcid corresponding to the ccdid and qid """
+    return 4*(ccdid - 1) + qid - 1
+
+def rcid_to_ccdid_qid(rcid):
+    """ gets the ccdid and qid for the given rcid """
+    qid = (rcid%4)+1
+    ccdid  = int((rcid-(qid - 1))/4 +1)
+    return ccdid, qid
