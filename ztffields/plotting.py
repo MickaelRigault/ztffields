@@ -136,7 +136,7 @@ def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
             polyqad = Polygon(qad, facecolor=f"C{i}", edgecolor="None", zorder=3, alpha=0.6)
             ax.add_patch(polyqad)
             centroid_ = np.mean(qad, axis=0)
-            ax.text(*centroid_, f"{rcid+1}", va="center", ha="center", 
+            ax.text(*centroid_, f"{rcid}", va="center", ha="center", 
                     color="w", zorder=4, fontsize="x-small")
 
 
