@@ -654,13 +654,13 @@ class FieldFigure( object ):
             histax = self.ax.figure.add_axes([bboxax.xmin, ymin+height*(1-hratio), bboxax.width, 
                                          height*hratio])
 
-        if self._plotting["bins"] is None:
+        if "vrange" not in self._plotting:
             cax.set_visible(False)
             histax.set_visible(False)
             return None, None
-        else:
-            cax.set_visible(True)
-            histax.set_visible(True)
+    
+        cax.set_visible(True) # just to make sure
+        histax.set_visible(True) # just to make sure
         
         vmin, vmax = self._plotting["vrange"]
         data = self._plotting["cdata"]
