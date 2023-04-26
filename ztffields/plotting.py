@@ -530,12 +530,13 @@ class FieldFigure( object ):
         # Per-Polygon options
         #
         # - facecolors
-        if len(facecolors) == len(fieldverts):
+        prop = {} # generic properties applicable to all fields
+        if facecolors is not None and len(facecolors) == len(fieldverts):
             cmap = plt.get_cmap(cmap, lut=bins)
             vrange, cdata, colors = values_to_color(facecolors, 
                                         cmap=cmap, 
                                         vmin=vmin, vmax=vmax,
-                                        alpha=facealpha) 
+                                        alpha=facealpha)
             self._plotting["bins"] = bins
             self._plotting["cmap"] = cmap
             self._plotting["vrange"] = vrange
@@ -543,10 +544,17 @@ class FieldFigure( object ):
             fieldverts = fieldverts.join(pandas.DataFrame({"facecolor":list(colors)}, 
                                                             columns=['facecolor'], 
                                                             index=fieldverts.index))
+            
+        else:
+            from matplotlib.colors import to_rgba
+            self._plotting["bins"] = None
+            prop["facecolor"] = to_rgba("C0",0.1)
+            prop["edgecolor"] = to_rgba("k",0.7)
+            
         #
         # Calling plotter
         #
-        _ = self._show_fieldverts(fieldverts, ax=self.ax, **kwargs)
+        _ = self._show_fieldverts(fieldverts, ax=self.ax, **{**prop,**kwargs})
         if colorbar is not None:
             if type(colorbar) is str and "hist" in colorbar:
                 cbar,_ = self.add_histcolorbar()
@@ -645,6 +653,14 @@ class FieldFigure( object ):
             cax = self.ax.figure.add_axes([bboxax.xmin, ymin, bboxax.width, height*(1-(hratio+gapratio))])
             histax = self.ax.figure.add_axes([bboxax.xmin, ymin+height*(1-hratio), bboxax.width, 
                                          height*hratio])
+
+        if self._plotting["bins"] is None:
+            cax.set_visible(False)
+            histax.set_visible(False)
+            return None, None
+        else:
+            cax.set_visible(True)
+            histax.set_visible(True)
         
         vmin, vmax = self._plotting["vrange"]
         data = self._plotting["cdata"]

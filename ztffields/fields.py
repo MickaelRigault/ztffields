@@ -25,8 +25,92 @@ _SOURCE_DATA = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data")
 _FIELD_DATAFRAME = pandas.read_csv( os.path.join(_SOURCE_DATA, "ztf_fields.txt"), index_col="ID")
 
 
-__all__ = ["Fields"]
+__all__ = ["Fields", "get_fieldid"]
 
+
+def get_fieldid(grid=None, dec_range=None, ra_range=None, 
+                gall_range=None, galb_range=None, 
+                ecll_range=None, eclb_range=None, 
+                ebv_range=None, verbose=False):
+                
+    """ get the list of fieldid parameters fullfilling the conditions
+
+    Parameters
+    ----------
+    grid: Nonen, str
+        Select the grid you want. If None the both will be considered.
+        Available
+        - 'main'
+        - 'secondary'
+
+    dec_range, ra_range, galb_range, gall_range, ecllg_range, eclb_range: None, list
+        cut paramerers (in degree)
+        3 formats available:
+        - None: means no selection
+        - [min,max]: means range to be considered, None means no limit. 
+          example: decrange=[-10,None] means dec>-10.
+        - [[min1,max1],[min2,max2], ...]: means zones to be considered.
+          example: decrange=[[None, -10],[5,None]] will simply exclude the [-10,5] dec range.
+        - None means no selection.
+
+    ebv_range: None, list
+        same format as e.g., 'dec_range' but for Mily way E(B-V) extinction.        
+        
+    Returns
+    -------
+    list
+        list of int (fieldid)
+    """
+    def get_query(key, krange=None, merging_logic="or"):
+        """ """
+        def _build_2d_(kmin,kmax):
+            """ """
+            if kmin is None and kmax is None:
+                return []
+            if kmin is None:
+                return [f"{key}<={kmax}"]
+            elif kmax is None:
+                return [f"{key}>={kmin}"]
+            else:
+                return [f"{kmin}<={key}<={kmax}"]
+        
+        if krange is None:
+            return []
+        if np.shape(krange) == (2,):
+            return _build_2d_(*krange)
+        if np.shape(krange) == (2,2):
+            query = [_build_2d_(*krange_) for krange_ in krange]
+            return ["("+f" {merging_logic} ".join(np.squeeze(query))+")"]
+        
+        raise ValueError(f"Cannot for the format of the input krange: {krange}")
+
+    query = []
+    # Grid
+    gridid = None if (grid is None or grid in ["*","all"]) else get_grid_field(grid)
+    query.append([] if gridid is None else ["ID in @gridid"])
+    # Ra
+    
+    query.append(get_query("RA", ra_range))
+    # Dec
+    query.append(get_query("Dec", dec_range))
+    # gall
+    query.append(get_query("GalLong", gall_range))
+    # galb
+    query.append(get_query("GalLat", galb_range))
+    # ecll
+    query.append(get_query("EclLong", ecll_range))
+    # eclb
+    query.append(get_query("EclLat", eclb_range))
+    # MW ebmv
+    query.append(get_query("Ebv", ebv_range))
+    
+    queries = np.concatenate(query)
+    if len(queries) == 0:
+        fieldid = _FIELD_DATAFRAME.index
+    else:
+        fieldid = _FIELD_DATAFRAME.query( " & ".join(queries) ).index
+        
+    return list(fieldid)
 
 def get_grid_field(which):
     """ """
@@ -55,8 +139,6 @@ def get_layout(level):
     return layout
         
         
-
-
 class Fields( object ):
     """ Interact or access ZTF Fields. """
     

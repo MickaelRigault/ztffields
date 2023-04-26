@@ -35,9 +35,9 @@ def radec_to_fieldid(radecs, level="focalplane", **kwargs):
     """ """
     return FieldProjection.radec_to_fieldid(radecs, level=level, **kwargs)
 
-def fieldid_to_radec(radecs, level="focalplane", **kwargs):
+def fieldid_to_radec(fieldid, level="focalplane", **kwargs):
     """ """
-    return FieldProjection.fieldid_to_radec(radecs, level=level, **kwargs)
+    return FieldProjection.fieldid_to_radec(fieldid, level=level, **kwargs)
 
 
 # ============== #
