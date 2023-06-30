@@ -197,7 +197,7 @@ def skyplot_fields(fieldid, figsize=(7,4), level="focalplane",
 
 class FieldFigure( object ):
 
-    def __init__(self, figsize=(7,4), level="focalplane", system="icrs", origin=180, **kwargs):
+    def __init__(self, geodf, figsize=(7,4), system="icrs", origin=180, **kwargs):
         """ 
         
         Parameters
@@ -217,12 +217,19 @@ class FieldFigure( object ):
         -------
         None
         """
-        self._geodf = Fields.get_field_geometry(level=level, **kwargs)
+        self._geodf = geodf
         self.set_system(system, origin=origin)
         
         import matplotlib.pyplot as plt
         self._figure = plt.figure(figsize=(7,4))
         self._plotting = {}
+
+
+    @classmethod
+    def from_level(cls, level, figsize=(7,4), system="icrs", origin=180, **kwargs):
+        """ """
+        geodf = Fields.get_field_geometry(level=level, **kwargs)
+        return cls(geodf=geodf, figsize=figsize, system=system, origin=origin)
 
 
     def set_system(self, system="icrs", origin=180):
@@ -270,7 +277,6 @@ class FieldFigure( object ):
         xy[flag_egde] = ((xy[flag_egde] + origin)%360 - origin)
 
         if not is_cartopy:
-            
             xy -= [origin,0] # set the origin
             xy *= np.pi/180 # in radian
             
@@ -356,7 +362,7 @@ class FieldFigure( object ):
         figure
         """
         # Create figure and the plotting system        
-        figfield = cls(figsize=figsize, level=level, system=system)
+        figfield = cls.from_level(level=level,figsize=figsize,system=system)
         
         # Create the axes
         ax = figfield.add_axes(projection=projection)
@@ -517,7 +523,7 @@ class FieldFigure( object ):
             
         import matplotlib.pyplot as plt
 
-        fieldverts = self.geodf[["xy"]].copy()            
+        fieldverts = self.geodf[["xy"]].copy()
         if fieldid is not None:
             fieldverts = fieldverts.loc[fieldid]
             

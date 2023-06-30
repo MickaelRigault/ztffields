@@ -39,15 +39,63 @@ def fieldid_to_radec(fieldid, level="focalplane", **kwargs):
     """ """
     return FieldProjection.fieldid_to_radec(fieldid, level=level, **kwargs)
 
-
 # ============== #
 #                #
 # Generic Tools  #
 #                #
 # ============== #
+def project_to_radec(verts_or_polygon, ra, dec):
+    """ project a geometry (or its vertices) to given ra, dec coordinates
+    
+    Parameters
+    ----------
+    verts_or_polygon: shapely.Polygon or 2d-array
+        geometry or vertices representing the camera footprint in the sky
+        if vertices, the format is: x, y = vertices
+
+    ra: float or array
+        poiting(s) R.A.
+
+    dec: float or array
+        poiting(s) declination
+
+    Returns
+    -------
+    list
+        if input are vertices
+        - list of new verticies
+        if input are geometry
+        - list of new geometries
+
+    """
+    from .utils import rot_xz_sph
+    
+    if type(verts_or_polygon) == geometry.Polygon: # polygon
+        as_polygon = True
+        fra, fdec = np.asarray(verts_or_polygon.exterior.xy)
+    else:
+        as_polygon = False
+        fra, fdec = np.asarray(verts_or_polygon)
+    
+    ra = np.atleast_1d(ra)
+    dec = np.atleast_1d(dec)
+    ra_, dec_ = np.squeeze(rot_xz_sph((fra/np.cos(fdec*np.pi/180))[:,None], 
+                                            fdec[:,None], 
+                                            dec)
+                          )
+    ra_ += ra
+    pointings = np.asarray([ra_, dec_]).T
+    if as_polygon:
+        return [geometry.Polygon(p) for p in pointings]
+    
+    return pointings
+
+
+
 def spatialjoin_radec_to_fields(radec, fields,
                                 how="inner", predicate="intersects",
-                                index_radec="index_radec", **kwargs):
+                                index_radec="index_radec",
+                                allow_dask=True, **kwargs):
     """ join the radecs with the fields
 
     Parameters
@@ -95,7 +143,22 @@ def spatialjoin_radec_to_fields(radec, fields,
     # -------- #
     # Joining  #
     # -------- #
+    # This goes linearly as size of fields
+    if len(fields)>30_000 and allow_dask:
+        try:
+            import dask_geopandas
+        except:
+            warnings.warn("you don't have dask-geopandas, you have more than 20_000 fields, this would be faster with dask-greopandas")
+        else:
+            if type(fields.index) is not pandas.MultiIndex: # not supported
+                fields = dask_geopandas.from_geopandas(fields, npartitions=10)
+                geopoints = dask_geopandas.from_geopandas(geopoints, npartitions=10)
+            else:
+                warnings.warn("cannot use dask_geopandas with MultiIndex fields dataframe")
+            
     sjoined = geopoints.sjoin(fields,  how="inner", predicate="intersects", **kwargs)
+    if "dask" in str( type(sjoined) ):
+        sjoined = sjoined.compute()
 
     # multi-index
     if type(fields.index) == pandas.MultiIndex:

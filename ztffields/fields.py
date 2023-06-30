@@ -345,6 +345,18 @@ class Fields( object ):
     # ---------- #
     #  Corners   #
     # ---------- #
+    @classmethod
+    def get_contours(cls, level="quadrant", inrad=False, steps=5,
+                         ra=0, dec=0, as_polygon=False,
+                         allow_multipolygon=True, **kwargs):
+        """ """
+        func = getattr(cls,f"get_{level}_contours")
+        contours = func(inrad=inrad, steps=steps, ra=ra, dec=dec, as_polygon=as_polygon, **kwargs)
+        if as_polygon and level in ["ccd", "quadrant"] and allow_multipolygon:
+            contours = geometry.MultiPolygon(list(contours))
+
+        return contours
+    
     # Quadrant    
     @classmethod    
     def get_quadrant_contours(cls, rcid=None, 
@@ -522,7 +534,7 @@ class Fields( object ):
         ra1  = (np.linspace(ewmax, ewmin, steps)/np.cos(nsmax*_DEG2RA)).T
         dec1 = (np.ones((steps,1))*nsmax).T
         #
-        dec2  = np.linspace(nsmax,nsmin, steps).T
+        dec2  = np.linspace(nsmax,nsmin, steps).T        
         ra2   = ewmin[:,None]/np.cos(dec2*_DEG2RA)
         #
         ra3 = (np.linspace(ewmin,ewmax, steps)/np.cos(nsmin*_DEG2RA)).T
@@ -530,7 +542,7 @@ class Fields( object ):
         #
         dec4  = np.linspace(nsmin,nsmax, steps).T
         ra4 = ewmax[:,None]/np.cos(dec4*_DEG2RA)
-
+        
         ra_bd = np.concatenate((ra1, ra2, ra3, ra4  ), axis=1)  
         dec_bd = np.concatenate((dec1, dec2, dec3,dec4 ), axis=1)
 
