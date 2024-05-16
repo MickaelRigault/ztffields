@@ -133,7 +133,6 @@ main grid avoiding galactic latitude lower than 10.
 
 		   
 .. image:: _static/skyplot_random_robinson.png
-	   
   :alt: Skyplot random galactic
 
 
