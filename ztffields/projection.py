@@ -128,7 +128,7 @@ def spatialjoin_radec_to_fields(radec, fields,
         if inshape[-1] != 2:
             raise ValueError(f"shape of radec must be (N, 2), {inshape} given.")
         
-        radec = pandas.DataFrame(radec, columns=["ra","dec"])
+        radec = pandas.DataFrame(np.atleast_2d(radec), columns=["ra","dec"])
 
     # Points to be considered
     geoarray = geopandas.points_from_xy(*radec[["ra","dec"]].values.T)
@@ -316,10 +316,33 @@ class FieldProjection( object ):
         return this.get_target_fields(explode=explode)
         
     @classmethod
-    def fieldid_to_radec(cls, radec, level="focalplane", explode=True):
+    def fieldid_to_radec(cls, fieldid=None, level="focalplane", as_shapely=False):
         """ """
-        this = cls(radec=radec, level=level)
-        return this.get_field_targets(explode=explode)
+        this = cls(level=level)
+        geo_df = this.get_geoseries(level).to_frame("geometry").copy()
+
+        # build the geodataframe of centroid
+        if level == "focalplane":
+            geocentroid = geo_df["geometry"].centroid
+            if fieldid is not None:
+                geocentroid = geocentroid.loc[fieldid] # single-index
+                
+            
+        elif level == "ccd" or "quadrant":
+            key = "ccdid" if level == "ccd" else "rcid"
+            fieldid, levelid = np.vstack(geo_df.index.str.split("_")).astype("int32").T
+            geo_df["fieldid"], geo_df[key] = fieldid, levelid
+            geocentroid = geo_df.set_index(["fieldid", key]).centroid
+            if fieldid is not None:
+                geocentroid = geocentroid.loc[fieldid,:] # multi-index
+            
+        else:
+            raise ValueError(f"level={level} is not accepted.")
+
+        if as_shapely:
+            return geocentroid
+        
+        return geocentroid.map(lambda x: np.hstack(x.xy))
         
     # ============= #
     #  Methods      #

@@ -66,10 +66,9 @@ def colorbar(ax, cmap, vmin=0, vmax=1, label="",
 #  FootPring     #
 #                #
 # -------------- #
-
 def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
                            ccd_color="k", focalplane_color="0.7"):
-    """ displays the ZTF footprind 
+    """ displays the ZTF footprint
 
     Parameters
     ----------
@@ -143,6 +142,7 @@ def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
     ax.set_xlim(-5+ra,5+ra)
     ax.set_ylim(-5+dec,5+dec)
     return fig
+
 # -------------- #
 #                #
 #  FieldFigure   #
@@ -193,7 +193,9 @@ def skyplot_fields(fieldid, figsize=(7,4), level="focalplane",
     
     """
     return FieldFigure.skyplot_fields(fieldid, figsize=figsize, level=level,
-                                          system=system, projection=projection, **kwargs)
+                                      system=system, projection=projection,
+                                      **kwargs)
+
 
 class FieldFigure( object ):
 
@@ -202,6 +204,9 @@ class FieldFigure( object ):
         
         Parameters
         ----------
+
+        geodf: geopandas.DataFrame
+        
 
         figsize : (float, float)
             Width, height in inches.
@@ -212,6 +217,8 @@ class FieldFigure( object ):
             - ccd: 1 polygon per CCD (16 per footprint then)
             - quadrant: 1 polygon per quadrant (64 per per footprint then)
             ccd and quadrant level will account for gaps between the CCDs.
+
+        system
 
         Returns
         -------
@@ -232,6 +239,41 @@ class FieldFigure( object ):
         return cls(geodf=geodf, figsize=figsize, system=system, origin=origin)
 
 
+    @staticmethod
+    def _parse_system(system, default_frame="astro"):
+        """ clean the input system for self consistancy 
+
+        Parameters
+        ----------
+        system: str
+            coordinates system: 
+            - icrs (ra, dec) | shortcut for astro icrs
+            - astro icrs (ra, dec) east is right
+            - geo icrs (ra, dec) west is right
+            - galactic (l, b)
+            
+            Note: for simplicity radec<->ircs or lb<->galactic
+            such that 'geo radec' is equivalent to 'geo icrs'
+            
+        Returns
+        -------
+        system: str
+        """
+        system = system.replace("radec", "icrs").replace("lb", "galactic")
+        *frame, sys = system.split(" ")
+        if len(frame) == 0:
+            frame = default_frame
+        elif len(frame) == 1 and frame[0] in ["geo", "astro"]:
+            frame = frame[0]
+        else:
+            raise ValueError(f"cannot parse input frame, astro or geo expected, got: {frame}")
+
+        if sys == "galactic":
+            return sys
+        
+        return f"{frame} {sys}"
+        
+        
     def set_system(self, system="icrs", origin=180):
         """ set the plotting coordinate system.
 
@@ -239,7 +281,9 @@ class FieldFigure( object ):
         ----------
         system: str
             coordinates system: 
-            - icrs (ra, dec)
+            - icrs (ra, dec) | shortcut for astro icrs
+            - astro icrs (ra, dec) east is right
+            - geo icrs (ra, dec) west is right
             - galactic (l, b)
 
         origin: float
@@ -250,14 +294,16 @@ class FieldFigure( object ):
         -------
         None
         """
-        if hasattr(self,"_is_cartopy") and self._is_cartopy:
-            is_cartopy = True
-        else:
-            is_cartopy = False
-
+        system = self._parse_system(system)
+        
         xy_icrs = np.stack(self._geodf["geometry"].apply(lambda x: ((np.asarray(x.exterior.xy)).T) ).values)
-        if system == "icrs":
+        if "astro" in system:
+            # invert ra direction
+            xy_icrs[:,:,0] *=-1
+
+        if "icrs" in system:
             xy = xy_icrs
+            
         else:
             from astropy import coordinates, units            
             shape_ = xy_icrs.shape
@@ -272,14 +318,7 @@ class FieldFigure( object ):
             else:
                 raise NotImplementedError(f"'{system}' has not been implemented")
 
-        # identify and correct edge effects
-        flag_egde = np.any(np.diff(xy, axis=1)>300, axis=1)[:,0]
-        xy[flag_egde] = ((xy[flag_egde] + origin)%360 - origin)
-
-        if not is_cartopy:
-            xy -= [origin,0] # set the origin
-            xy *= np.pi/180 # in radian
-            
+        # identify and correct edge effects            
         self._geodf["xy"] = list(xy)
         self._system = system
         self._origin = origin
@@ -289,8 +328,8 @@ class FieldFigure( object ):
     # =============== #    
     @classmethod
     def skyplot_fields(cls, fieldid, figsize=(7,4), level="focalplane",
-                           system="icrs", projection=None,
-                           add_mw=True, mwcolor = "k", mwb=5,
+                           system="icrs", origin=180, projection=None,
+                           add_mw=True, mwcolor = "0.7", mwb=5,
                            colorbar="hist", facealpha=0.9, edgecolor="None",
                            bins=None, **kwargs):
         """ plot fields on a 2d sky projection.
@@ -360,9 +399,10 @@ class FieldFigure( object ):
         Returns
         -------
         figure
+
         """
         # Create figure and the plotting system        
-        figfield = cls.from_level(level=level,figsize=figsize,system=system)
+        figfield = cls.from_level(level=level, figsize=figsize, system=system, origin=origin)
         
         # Create the axes
         ax = figfield.add_axes(projection=projection)
@@ -374,7 +414,7 @@ class FieldFigure( object ):
         
         # Add the Milky way if wanted.
         if add_mw:
-            _ = figfield.add_milkyway(color=mwcolor, b=mwb)
+            _ = figfield.add_milkyway(ax=ax, color=mwcolor, b=mwb)
 
         return figfield.figure
     
@@ -439,7 +479,7 @@ class FieldFigure( object ):
         if self._is_cartopy:
             self._projection = projection
             ax.set_global()
-            self.set_system(self._system)
+#            self.set_system(self._system)
             
         return ax
     
@@ -560,7 +600,7 @@ class FieldFigure( object ):
         #
         # Calling plotter
         #
-        _ = self._show_fieldverts(fieldverts, ax=self.ax, **{**prop,**kwargs})
+        _ = self._show_fieldverts(fieldverts, ax=ax, **{**prop,**kwargs})
         if colorbar is not None:
             if type(colorbar) is str and "hist" in colorbar:
                 cbar,_ = self.add_histcolorbar()
@@ -695,7 +735,7 @@ class FieldFigure( object ):
         histax.axis("off")
         return cbar, _
         
-    def add_milkyway(self, b=5, nbins=300, l_start=-241, l_stop=116, **kwargs):
+    def add_milkyway(self, b=5, nbins=400, l_start=0, l_stop=360, ax=None, zorder=2, **kwargs):
         """ add the milky way location on the main axes' figure (self.ax)
         
         Parameters
@@ -716,66 +756,91 @@ class FieldFigure( object ):
         output of ax.plot or ax.fill_between
         """
         from astropy import coordinates, units
+        if ax is None:
+            ax = self.ax
+
         
         prop_line = dict(ls="-", color="0.7", alpha=0.5)
-        prop_band = dict(facecolor="0.7", alpha=0.2)
+        prop_band = dict(facecolor="0.7", alpha=1)
+        kwargs["zorder"] = zorder # because explicit input
 
-        # Cartopy
+        if b is None or b==0:
+                b = 1
         
+        if "icrs" in self.system:
+            long_, lat_ = np.linspace(l_start, l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
+            gal = coordinates.Galactic( long_, lat_ ).transform_to(coordinates.ICRS())
+            ra, dec = gal.ra.value, gal.dec.value
+            if "astro" in self.system:
+                ra *=-1
+            # make sure nothign breaks
+
+        ra, dec = self._parse_radec_for_plot(ra, dec, sort=True)        
+        #              #
+        # Cartopy      #
+        #              #
+
         if self._is_cartopy:
                 
             from shapely.geometry import LineString
             import cartopy.crs as ccrs
-            if b is None or b==0:
-                b = 1
-
-            long_, lat_ = np.linspace(l_start,l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
-            if self.system == "icrs":
-                gal = coordinates.Galactic( long_, lat_ ).transform_to(coordinates.ICRS)
-                ggal = LineString( zip(gal.ra.value, gal.dec.value) ).buffer(b)
-            elif self.system == "galactic":
+            
+            if "icrs" in self.system:
+                ggal = LineString( zip(ra, dec) ).buffer(b)
+                
+            elif self.system == "galactic":                
                 ggal = LineString( zip(long_.value, lat_.value) ).buffer(b)
+                
             else:
                 raise NotImplementedError("Milky way plotting has not been implemented for the current system '{self.system}'")
-            
-            return self.ax.add_geometries([ggal], ccrs.PlateCarree(central_longitude=self._origin),
-                                  **{**prop_band, **kwargs})
-            
 
-
-        # Matplotlib
-        
+            return ax.add_geometries(ggal,
+                                     ccrs.PlateCarree(self._origin),
+                                     **{**prop_band, **kwargs}
+                                     )
+            
+        #              #
+        # Matplotlib   #
+        #              #
         # l, b
-        if self.system == "galactic":
+        if "galactic" in self.system:
             if b is None:
-                _ = self.ax.axhline(0, **{**prop_line, **kwargs})
+                _ = ax.axhline(0, **{**prop_line, **kwargs})
             else:
-                _ = self.ax.axhspan(-b*np.pi/180, b*np.pi/180, **{**prop_band,**kwargs})
+                _ = ax.axhspan(-b*np.pi/180, b*np.pi/180, **{**prop_band,**kwargs})
+                
         # RA Dec
-        elif self.system == "icrs":
-            
-            if b is None:
-                gal = coordinates.Galactic( np.linspace(l_start,l_stop,nbins)*units.deg, np.zeros(nbins)*units.deg
-                                                ).transform_to(coordinates.ICRS)
-
-                _ = self.ax.plot(*self._radec_to_plot(gal.ra, gal.dec), **{**prop_line, **kwargs})
-            
-            else:
-                gal_dw = coordinates.Galactic(np.linspace(l_start,l_stop,nbins)*units.deg,
-                                                  +b*np.ones(nbins)*units.deg
-                                                  ).transform_to(coordinates.ICRS())
-                gal_up = coordinates.Galactic(np.linspace(l_start,l_stop,nbins)*units.deg,
-                                                  -b*np.ones(nbins)*units.deg
-                                                  ).transform_to(coordinates.ICRS())
-                ra_dw,dec_dw = self._radec_to_plot(gal_dw.ra, gal_dw.dec)
-                ra_up,dec_up = self._radec_to_plot(gal_up.ra, gal_up.dec)
-
-                _ = self.ax.fill_between(ra_dw, dec_dw, dec_up, **{**prop_band, **kwargs})
+        elif "icrs" in self.system:
+            # matplotlib works in radian
+            _ = ax.fill_between(ra,
+                                dec + b*np.pi/180,
+                                dec - b*np.pi/180,
+                                **{**prop_band, **kwargs})
+                
         else:
             raise NotImplementedError("Milky way plotting has not been implemented for the current system '{self.system}'")
         
         return _
 
+    def _parse_radec_for_plot(self, ra, dec, sort=False):
+        """ """
+        if self._is_cartopy:
+            pass
+        else:
+            ra = ra+self._origin # copy
+            ra = (ra + 180)%360 - 180 # -180->+180
+            # copy
+            ra = ra * np.pi/180
+            dec = dec * np.pi/180
+
+        if sort:
+            argsort_ra = np.argsort(ra)
+            ra = ra[argsort_ra]
+            dec = dec[argsort_ra]
+
+        return ra, dec
+        
+    
     # =============== #
     #   Internal      #
     # =============== #
@@ -792,27 +857,28 @@ class FieldFigure( object ):
         """ """
         self._plotting = {}
     
-    def _show_fieldverts(self, fieldverts, ax, **kwargs):
+    def _show_fieldverts(self, fieldverts, ax, zorder=4, **kwargs):
         """ """
+        kwargs["zorder"] = zorder # because explicit input
+        
         from matplotlib.patches import Polygon
         if self._is_cartopy:
             import cartopy.crs as ccrs
-            kwargs["transform"] = ccrs.PlateCarree(central_longitude=self._origin)
+            kwargs["transform"] = ccrs.PlateCarree(self._origin)
+
+        if not self._is_cartopy:
+            import warnings
+            warnings.warn("you are not using cartopy projection, issues may appear on the edge")
+            fieldverts = fieldverts.copy()
+            xy = np.stack(fieldverts["xy"].values)
+            xy[:,:, 0] += self._origin
+            xy[:,:, 0] = (xy[:,:, 0] + 180)%360 - 180 # -180->+180
+            xy *= np.pi/180
+            fieldverts["xy"] = list(xy) # feed back in
             
-        patches = [Polygon(**v_.to_dict(), **kwargs) for i_, v_ in fieldverts.iterrows()]
-        return [self.ax.add_patch(patch_) for patch_ in patches]
-        
-    def _radec_to_plot(self, ra, dec):
-        """ """
-        if self._is_cartopy:
-            coef = 1
-            origin = 0
-        else:
-            coef = np.pi/180
-            origin = self._origin
+        patches = [Polygon(**fieldvert_.to_dict(), **kwargs) for i, fieldvert_ in fieldverts.iterrows()]
+        return [ax.add_patch(patch_) for patch_ in patches]
             
-        return np.asarray([(np.asarray(ra) - origin)* coef, np.asarray(dec)* coef]) 
-    
 
     def _build_histrogram(self, data, bins=None, **kwargs):
         """ """
