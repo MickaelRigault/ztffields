@@ -316,25 +316,39 @@ class FieldProjection( object ):
         return this.get_target_fields(explode=explode)
         
     @classmethod
-    def fieldid_to_radec(cls, fieldid=None, level="focalplane", as_shapely=False):
+    def fieldid_to_radec(cls, fieldid=None, ccdid_or_qid=None, level="focalplane", as_shapely=False):
         """ """
         this = cls(level=level)
         geo_df = this.get_geoseries(level).to_frame("geometry").copy()
 
         # build the geodataframe of centroid
         if level == "focalplane":
+            if ccdid_or_qid is not None:
+                warnings.warn(f"{ccdid_or_qid=} is ignored with level='focalplane'")
             geocentroid = geo_df["geometry"].centroid
             if fieldid is not None:
-                geocentroid = geocentroid.loc[fieldid] # single-index
+                geocentroid = geocentroid.loc[np.atleast_1d(fieldid)] # single-index
                 
             
-        elif level == "ccd" or "quadrant":
+        elif level == "ccd" or level == "quadrant":
             key = "ccdid" if level == "ccd" else "rcid"
             fieldid, levelid = np.vstack(geo_df.index.str.split("_")).astype("int32").T
             geo_df["fieldid"], geo_df[key] = fieldid, levelid
             geocentroid = geo_df.set_index(["fieldid", key]).centroid
-            if fieldid is not None:
-                geocentroid = geocentroid.loc[fieldid,:] # multi-index
+            if fieldid is not None or ccdid_or_qid is not None:
+                if fieldid is None:
+                    geocentroid = geocentroid.loc[:,
+                                                  np.atleast_1d(ccdid_or_qid),
+                                                  :] # multi-index
+                elif ccdid_or_qid is None:
+                    geocentroid = geocentroid.loc[np.atleast_1d(fieldid),
+                                                  :,
+                                                  :] # multi-index
+                else:
+                    geocentroid = geocentroid.loc[np.atleast_1d(fieldid),
+                                                  np.atleast_1d(ccdid_or_qid),
+                                                  :] # multi-index
+                    
             
         else:
             raise ValueError(f"level={level} is not accepted.")
