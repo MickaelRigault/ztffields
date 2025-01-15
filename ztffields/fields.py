@@ -7,9 +7,7 @@ Module to handle ZTF Fields.
 .. autosummary::
 
    Fields
-   fieldid_to_radec
-   spatialjoin_radec_to_fields
-   FieldProjection
+   FieldVerts
 
 """
 import pandas
@@ -587,4 +585,55 @@ class Fields( object ):
             self.load_level_geometry("quadrant")
             
         return self._geodf_quadrant
+
+
+# ================ #
+#  Fast Vertices   #
+# ================ #
+class FieldVerts( object ):
     
+    def __init__(self, load_which="*"):
+        """ """
+        if load_which in ["all", "*"]:
+            load_which = ["quadrant", "ccd", "focalplane"]
+        self._fieldids = {}
+        self._verts = {}
+        
+        # Focal Plane
+        for which in np.atleast_1d(load_which):
+            fieldid, verts = Fields.get_field_vertices(level=which)
+            self._fieldids[which] = fieldid
+            self._verts[which] = verts
+
+    # ============= #
+    #  Methods      #
+    # ============= #
+    def get_centroid(self, level, fieldid=None, as_dataframe=False):
+        """ """
+        verts = self.verts.get(level)
+        if verts is None:
+            raise ValueError(f"no vertices for {level=}")
+        if fieldid is None:
+            centroids = np.mean(verts.reshape(np.prod(verts.shape[:-2]), 20,2), axis=1)
+
+        if as_dataframe:
+            centroids = pandas.DataFrame(centroids, columns=["ra", "dec"])
+            if level == "focalplane":
+                centroids = centroids.set_index(self.fieldids.get(level)["fieldid"])
+            else:
+                index = pandas.MultiIndex.from_frame(self.fieldids.get(level))
+                centroids = centroids.set_index(index)
+            
+        return centroids
+    # ============= #
+    #  Properties   #
+    # ============= #
+    @property
+    def fieldids(self):
+        """ """
+        return self._fieldids
+
+    @property
+    def verts(self):
+        """ """
+        return self._verts

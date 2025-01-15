@@ -21,9 +21,11 @@ import geopandas
 from shapely import geometry
 
 #
-from .fields import Fields
+from .fields import Fields, FieldVerts
 
 __all__ = ["radec_to_fieldid", "fieldid_to_radec", "FieldProjection"]
+
+FIELD_VERTICES = FieldVerts(load_which="all")
 
 # ============== #
 #                #
@@ -35,9 +37,50 @@ def radec_to_fieldid(radecs, level="focalplane", **kwargs):
     """ """
     return FieldProjection.radec_to_fieldid(radecs, level=level, **kwargs)
 
-def fieldid_to_radec(fieldid, level="focalplane", **kwargs):
-    """ """
-    return FieldProjection.fieldid_to_radec(fieldid, level=level, **kwargs)
+def fieldid_to_radec(fieldid=None, level="focalplane", **kwargs):
+    """ 
+    Parameters
+    ----------
+    fieldid: int, list, array
+        If None, all is returned.
+        expected shape of fieldid depends on requested level:
+        - focalplane: 1d array (N,) will return N entries e.g.
+            (fieldid_1, fieldid_2, ...)
+        - ccd, quadrant: 1 (N,) or 2d array (N, 2) will return N entries 
+            if (N,): expected: (fieldid_1, 
+                                fieldid_2, ...)
+            else: expected: ( [fieldid_1,ccdid_1], [fieldid_1,ccdid_2], 
+                              [fieldid_2,ccdid_3], ...)
+                              
+        # Caution example:
+        fieldid_to_radec([427,14], level="ccd") 
+        => returns 32 entries (all 16 CCDs for fields 427 and 14
+        fieldid_to_radec([ [427,14] ], level="ccd") 
+        => returns 1 entry, the CCD 14 of field 427
+        
+        # Alternative
+        for more option, simply use fieldid = None and parse the 
+        pandas multi-index dataframe after. 
+        For instance, to get all 13 of all fields:
+        fieldid_to_radec(level="ccd").xs(13, level=1).
+        
+    level: str
+        level of description of the camera.
+        - focalplane: 1 polygon for the whole footprint
+        - ccd: 1 polygon per CCD (16 per footprint then)
+        - quadrant: 1 polygon per quadrant (64 per per footprint then)
+        ccd and quadrant level will account for gaps between the CCDs.
+        
+    Returns
+    -------
+    DataFrame
+    """
+    return FieldProjection.fieldid_to_radec(fieldid=fieldid, level=level, **kwargs)
+
+## Information:
+# ZTF Quadrant shape is (3080, 3072)
+#    So 3080 pixels -> RA (x-axis imshow)
+#    So 3072 pixels -> Dec (y-axis imshow)
 
 # ============== #
 #                #
@@ -296,7 +339,7 @@ def regions_to_shapely(region):
     return geom
 
 
-
+    
 class FieldProjection( object ):
 
     def __init__(self, level=None, radec=None):
@@ -315,48 +358,63 @@ class FieldProjection( object ):
         this = cls(radec=radec, level=level)
         return this.get_target_fields(explode=explode)
         
-    @classmethod
-    def fieldid_to_radec(cls, fieldid=None, ccdid_or_qid=None, level="focalplane", as_shapely=False):
-        """ """
-        this = cls(level=level)
-        geo_df = this.get_geoseries(level).to_frame("geometry").copy()
-
-        # build the geodataframe of centroid
-        if level == "focalplane":
-            if ccdid_or_qid is not None:
-                warnings.warn(f"{ccdid_or_qid=} is ignored with level='focalplane'")
-            geocentroid = geo_df["geometry"].centroid
-            if fieldid is not None:
-                geocentroid = geocentroid.loc[np.atleast_1d(fieldid)] # single-index
-                
+    @staticmethod
+    def fieldid_to_radec(fieldid=None, level="focalplane", as_geoms=True):
+        """ get centroid coordinated for given fieldid (and potentially CCD or quadrant sub-structures)
+    
+        Parameters
+        ----------
+        fieldid: int, list, array
+            If None, all is returned.
+            expected shape of fieldid depends on requested level:
+            - focalplane: 1d array (N,) will return N entries e.g.
+                (fieldid_1, fieldid_2, ...)
+            - ccd, quadrant: 1 (N,) or 2d array (N, 2) will return N entries 
+                if (N,): expected: (fieldid_1, 
+                                    fieldid_2, ...)
+                else: expected: ( [fieldid_1,ccdid_1], [fieldid_1,ccdid_2], 
+                                  [fieldid_2,ccdid_3], ...)
+                                  
+            # Caution example:
+            fieldid_to_radec([427,14], level="ccd") 
+            => returns 32 entries (all 16 CCDs for fields 427 and 14
+            fieldid_to_radec([ [427,14] ], level="ccd") 
+            => returns 1 entry, the CCD 14 of field 427
             
-        elif level == "ccd" or level == "quadrant":
-            key = "ccdid" if level == "ccd" else "rcid"
-            fieldid, levelid = np.vstack(geo_df.index.str.split("_")).astype("int32").T
-            geo_df["fieldid"], geo_df[key] = fieldid, levelid
-            geocentroid = geo_df.set_index(["fieldid", key]).centroid
-            if fieldid is not None or ccdid_or_qid is not None:
-                if fieldid is None:
-                    geocentroid = geocentroid.loc[:,
-                                                  np.atleast_1d(ccdid_or_qid),
-                                                  :] # multi-index
-                elif ccdid_or_qid is None:
-                    geocentroid = geocentroid.loc[np.atleast_1d(fieldid),
-                                                  :,
-                                                  :] # multi-index
-                else:
-                    geocentroid = geocentroid.loc[np.atleast_1d(fieldid),
-                                                  np.atleast_1d(ccdid_or_qid),
-                                                  :] # multi-index
-                    
+            # Alternative
+            for more option, simply use fieldid = None and parse the 
+            pandas multi-index dataframe after. 
+            For instance, to get all 13 of all fields:
+            fieldid_to_radec(level="ccd").xs(13, level=1).
             
+        level: str
+            level of description of the camera.
+            - focalplane: 1 polygon for the whole footprint
+            - ccd: 1 polygon per CCD (16 per footprint then)
+            - quadrant: 1 polygon per quadrant (64 per per footprint then)
+            ccd and quadrant level will account for gaps between the CCDs.
+            
+        Returns
+        -------
+        DataFrame
+        """
+        which = FIELD_VERTICES.get_centroid(level, as_dataframe=True)
+    
+        if fieldid is None:
+            return which
+    
+        fieldid = np.atleast_1d(fieldid)
+        if fieldid.ndim == 1: # list of fields
+            output = which.loc[fieldid] 
         else:
-            raise ValueError(f"level={level} is not accepted.")
-
-        if as_shapely:
-            return geocentroid
-        
-        return geocentroid.map(lambda x: np.hstack(x.xy))
+            if level == "focalplane":
+                raise ValueError(f"{fieldid=} has {fieldid.ndim} dimensions, 1 expected for level='focalplane'.")
+            elif fieldid.ndim == 2: # list of (fields, ccdid_rcid)
+               output = which.loc[which.index.isin(fieldid.tolist())]
+            else:
+                raise ValueError(f"{fieldid=} has{fieldid.ndim} dimensions, 1 or 2 expected.")
+            
+        return output
         
     # ============= #
     #  Methods      #
