@@ -542,16 +542,18 @@ class Fields( object ):
         ra4 = ewmax[:,None]/np.cos(dec4*_DEG2RA)
         
         ra_bd = np.concatenate((ra1, ra2, ra3, ra4  ), axis=1)  
-        dec_bd = np.concatenate((dec1, dec2, dec3,dec4 ), axis=1)
+        dec_bd = np.concatenate((dec1, dec2, dec3, dec4 ), axis=1)
 
-        ra_,dec_ = rot_xz_sph(np.moveaxis(ra_bd,0,1), np.moveaxis(dec_bd,0,1), np.moveaxis(np.atleast_3d(dec),0,1))
-        ra_ += np.moveaxis(np.atleast_3d(ra),0,1)
+        ra_, dec_ = rot_xz_sph(np.moveaxis(ra_bd,0,1),
+                               np.moveaxis(dec_bd,0,1),
+                               np.moveaxis(np.atleast_3d(dec),0,1))
+        ra_ += np.moveaxis(np.atleast_3d(ra), 0, 1)
 
         if inrad:
             ra_ *= _DEG2RA
             dec_ *= _DEG2RA
 
-        radec = np.moveaxis([ra_,dec_],(0,1,2,3),(3,0,2,1))
+        radec = np.moveaxis([ra_,dec_], (0,1,2,3), (3,0,2,1))
         if squeeze:
             radec = np.squeeze(radec)
 
@@ -608,15 +610,18 @@ class FieldVerts( object ):
     # ============= #
     #  Methods      #
     # ============= #
-    def get_centroid(self, level, fieldid=None, as_dataframe=False):
+    def get_centroid(self, level, as_dataframe=False):
         """ """
         verts = self.verts.get(level)
         if verts is None:
             raise ValueError(f"no vertices for {level=}")
-        if fieldid is None:
-            centroids = np.mean(verts.reshape(np.prod(verts.shape[:-2]), 20,2), axis=1)
 
-        if as_dataframe:
+        verts_npoints = verts.shape[-2] # like 20
+        # as numpy
+        centroids = np.mean(verts.reshape(np.prod(verts.shape[:-2]),
+                                          verts_npoints, 2), axis=1)
+        
+        if as_dataframe: # as dataframe
             centroids = pandas.DataFrame(centroids, columns=["ra", "dec"])
             if level == "focalplane":
                 centroids = centroids.set_index(self.fieldids.get(level)["fieldid"])
@@ -625,6 +630,49 @@ class FieldVerts( object ):
                 centroids = centroids.set_index(index)
             
         return centroids
+
+    def get_corner(self, level, which):
+        """ 
+        Parameters
+        ----------
+        level: str
+            focalplane, ccd, or quadrant
+
+        which: str, int
+            which corner. 
+            - 0: upper right
+            - 1: upper left
+            - 2: lower left
+            - 3: lower right
+        """
+        # input parsing
+        WHICH_DICT = {"upper right":0, "upper left":1,
+                      "lower left":2, "lower right":3}
+        if type(which) is str:
+            which = WHICH_DICT.get(which) # now an int
+            
+        # grabbing vertices
+        verts = self.verts.get(level)
+        if verts is None:
+            raise ValueError(f"no vertices for {level=}")
+
+        # getting the correct vert entry given the number of steps        
+        verts_nsteps = int(verts.shape[-2]/4) # like 20/4 = 5
+        if level == "focalplane":
+            corner =  verts[:, int(which*verts_nsteps), :]
+        else:
+            corner =  verts[:, :, int(which*verts_nsteps), :].reshape(
+                np.prod(verts.shape[:-2]), 2)
+
+        corner = pandas.DataFrame(corner, columns=["ra", "dec"])
+        if level == "focalplane":
+            corner = corner.set_index(self.fieldids.get(level)["fieldid"])
+        else:
+            index = pandas.MultiIndex.from_frame(self.fieldids.get(level))
+            corner = corner.set_index(index)
+            
+        return corner
+    
     # ============= #
     #  Properties   #
     # ============= #

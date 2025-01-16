@@ -8,6 +8,7 @@ Project targets (ra, dec) into the fields.
 
    radec_to_fieldid
    fieldid_to_radec
+   get_camera_location
    spatialjoin_radec_to_fields
    FieldProjection
 
@@ -23,10 +24,12 @@ from shapely import geometry
 #
 from .fields import Fields, FieldVerts
 
-__all__ = ["radec_to_fieldid", "fieldid_to_radec", "FieldProjection"]
+__all__ = ["radec_to_fieldid", "fieldid_to_radec",
+               "get_camera_location",
+               "FieldProjection"]
 
 FIELD_VERTICES = FieldVerts(load_which="all")
-
+RA_SIZE, DEC_SIZE = 3080, 3072
 # ============== #
 #                #
 #  shortcuts     #
@@ -77,10 +80,74 @@ def fieldid_to_radec(fieldid=None, level="focalplane", **kwargs):
     """
     return FieldProjection.fieldid_to_radec(fieldid=fieldid, level=level, **kwargs)
 
-## Information:
-# ZTF Quadrant shape is (3080, 3072)
-#    So 3080 pixels -> RA (x-axis imshow)
-#    So 3072 pixels -> Dec (y-axis imshow)
+def get_camera_location(ra, dec, level="quadrant", fielddf=None, keys=None):
+    """ get expected location of targets withing the camera (focalplane, ccd, or quadrant) level.
+    
+    Parameters
+    ----------
+    ra, dec: float, array
+        coordinates of interest (could be array of)
+
+    level: str
+        level of description of the camera.
+        - focalplane: 1 polygon for the whole footprint
+        - ccd: 1 polygon per CCD (16 per footprint then)
+        - quadrant: 1 polygon per quadrant (64 per per footprint then)
+        ccd and quadrant level will account for gaps between the CCDs.
+        
+    fielddf: pandas.DataFrame
+        if available the results of 
+        fielddf = ztffields.radec_to_fieldid(radec, level=level)
+        Otherwise, it is just recomputed.
+
+    keys: list, None
+        name of the camera location.
+        if None:
+        - level='quadrant': [x,y] # pixels from the lower right corner of the quadrant
+        - level='ccd': [i, j] # pixels from the lower right corner of the whole CCD
+        - level='focalplane': [u, v] # in camera fraction
+
+    Returns
+    -------
+    pandas.DataFrame
+       - level quadrant: keys
+    """
+    radec = np.asarray([ra, dec]).T
+    if fielddf is None:
+        fielddf = ztffields.radec_to_fieldid(radec, level=level)
+        
+    
+    coord_info = pandas.merge(fielddf, 
+                                  pandas.DataFrame({"ra":ra, "dec":dec, "targetid":np.arange(len(dec))}), 
+                                  left_index=True, right_index=True
+                                 )
+    # corner of fieldid
+    lowleft_corner = FIELD_VERTICES.get_corner(level, which="lower left")
+    upright_corner = FIELD_VERTICES.get_corner(level, which="upper right")
+    
+    fieldid_keys = lowleft_corner.index.names
+    coord_info = coord_info.join(lowleft_corner, on=fieldid_keys, rsuffix="_lowleft"
+                                 ).join(upright_corner, on=fieldid_keys, rsuffix="_upright")
+    
+    offset_percent = np.asarray([(coord_info["ra"]-coord_info["ra_lowleft"]
+                                 )/(coord_info["ra_upright"]-coord_info["ra_lowleft"]),
+                                 (coord_info["dec"]-coord_info["dec_lowleft"]
+                                 )/(coord_info["dec_upright"]-coord_info["dec_lowleft"])])
+    if level == "quadrant":
+        if keys is None:
+                keys = ["x", "y"]
+        offset_percent *= np.asarray([RA_SIZE, DEC_SIZE])[:, None]    
+    elif level == "ccd":
+        if keys is None:
+                keys = ["i", "j"]
+        offset_percent *= np.asarray([RA_SIZE, DEC_SIZE])[:, None]*2
+    elif level == "focalplane":
+        if keys is None:
+            keys = ["u", "v"]
+        
+    coord_info[keys] = offset_percent.T
+    return coord_info.set_index(["targetid"]+fieldid_keys)[["ra","dec"]+keys]
+
 
 # ============== #
 #                #
@@ -191,7 +258,8 @@ def spatialjoin_radec_to_fields(radec, fields,
         try:
             import dask_geopandas
         except:
-            warnings.warn("you don't have dask-geopandas, you have more than 20_000 fields, this would be faster with dask-greopandas")
+            pass # no more warnings.
+            #warnings.warn("you don't have dask-geopandas, you have more than 20_000 fields, this would be faster with dask-greopandas")
         else:
             if type(fields.index) is not pandas.MultiIndex: # not supported
                 fields = dask_geopandas.from_geopandas(fields, npartitions=10)
