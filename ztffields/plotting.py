@@ -67,29 +67,29 @@ def colorbar(ax, cmap, vmin=0, vmax=1, label="",
 #                #
 # -------------- #
 def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
-                           ccd_color="k", focalplane_color="0.7"):
-    """ displays the ZTF footprint
+                       ccd_color="k", focalplane_color="0.7", draw_arrows=False):
+    """ displays the ZTF footprint 
+    
+    Parameters 
+    ---------- 
+    ccdid: int, list, None 
+        if of the specific CCD(s) you want to display. 
+        None means all. 
 
-    Parameters
-    ----------
-    ccdid: int, list, None
-        if of the specific CCD(s) you want to display.
-        None means all.
-
-    fieldid: int
-        provide a fieldid. The footprint will be 
-        that of this field. If None, the camera 
-        footprint will be at ra=0, dec=0.
-
-    Returns
-    -------
-    figure
-        
+    fieldid: int 
+        provide a fieldid. The footprint will be that of this field. If None, the camera footprint will be at ra=0, dec=0. 
+    
+    Returns 
+    ------- 
+    figure 
+    
     """
+
     from .utils import ccdid_qid_to_rcid
     from matplotlib.patches import Polygon
+    import numpy as np
 
-    # consider as iterable for what comes next
+    # CCDs to display
     if ccdid is None:
         ccdids = np.arange(1,17)
     else:
@@ -99,7 +99,7 @@ def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
         ra, dec = 0,0
     else:
         ra, dec = Fields.get_field_centroids(fieldid).values
-        
+
     # Figure
     if ax is None:
         import matplotlib.pyplot as plt
@@ -108,39 +108,101 @@ def show_ztf_footprint(ax=None, ccdid=None, fieldid=None,
     else:
         fig = ax.figure
 
-    
-    # Focal Plane
+    # -------------------------
+    # Draw focal plane
+    # -------------------------
     fp = Fields.get_focalplane_contours(ra=ra, dec=dec)
     polyfp = Polygon(fp, facecolor="None", edgecolor=focalplane_color,
-                         zorder=6, lw=1)
+                     zorder=6, lw=1)
     ax.add_patch(polyfp)
 
-    # Loops over the quadrant inside the CCDS
-    # to make sure that they match as they should.
-    # (it enabled a orientation debug, see get_layout())
-    
-    # CCD
+    # -------------------------
+    # Draw CCDs and quadrants
+    # -------------------------
+    quadrant_to_label = 48
+    ccd_to_label = 4
+    qad_bl_label = None
+    ccd_bl_label = None
+    fp_center = np.mean(fp, axis=0)
+
     for ccdid in ccdids:
         ccd = Fields.get_ccd_contours(ccdid, ra=ra, dec=dec)
         polyccd = Polygon(ccd, facecolor="None", edgecolor="k", zorder=5, lw=2)
         ax.add_patch(polyccd)
-        #centroid_ = 
+
         ax.text(*np.mean(ccd, axis=0), f"{ccdid}", va="center", ha="center", 
-                color=ccd_color,zorder=5, weight="bold")
-        
-        # it's quadrants
+                color=ccd_color, zorder=5, weight="bold")
+
+        if ccdid == ccd_to_label:
+            ccd_bl_label = np.min(ccd, axis=0)  # store for later arrow
+
         rcids = ccdid_qid_to_rcid(ccdid, np.arange(1,5))
         for i, rcid in enumerate(rcids):
             qad = Fields.get_quadrant_contours(rcid, ra=ra, dec=dec)
-            polyqad = Polygon(qad, facecolor=f"C{i}", edgecolor="None", zorder=3, alpha=0.6)
+            polyqad = Polygon(qad, facecolor=f"C{i}", edgecolor="None",
+                              zorder=3, alpha=0.6)
             ax.add_patch(polyqad)
+
             centroid_ = np.mean(qad, axis=0)
             ax.text(*centroid_, f"{rcid}", va="center", ha="center", 
                     color="w", zorder=4, fontsize="x-small")
 
+            if rcid == quadrant_to_label:
+                qad_bl_label = np.min(qad, axis=0)  # store for later arrow
 
-    ax.set_xlim(-5+ra,5+ra)
-    ax.set_ylim(-5+dec,5+dec)
+    # -------------------------
+    # Draw arrows last on top
+    # -------------------------
+    if draw_arrows:
+        import matplotlib.pyplot as plt
+
+        # Focal plane u,v
+        L_fp = 2.2
+        offset_u = (-0.1, 0.1)  # dx, dy in plot units
+        offset_v = (0.1, -0.1)
+
+        ax.annotate("", xy=(fp_center[0] + L_fp, fp_center[1]), xytext=fp_center,
+                    arrowprops=dict(arrowstyle="->", color="darkviolet", lw=3), zorder=20)
+        ax.annotate("", xy=(fp_center[0], fp_center[1] + L_fp), xytext=fp_center,
+                    arrowprops=dict(arrowstyle="->", color="darkviolet", lw=3), zorder=20)
+        ax.text(fp_center[0] + L_fp + offset_u[0], fp_center[1] + offset_u[1],
+                "u", color="darkviolet", va="bottom", ha="left", zorder=20)
+        ax.text(fp_center[0] + offset_v[0], fp_center[1] + L_fp + offset_v[1],
+                "v", color="darkviolet", va="bottom", ha="left", zorder=20)
+
+        # CCD 4 i,j
+        if ccd_bl_label is not None:
+            L_ccd = 1.2
+            offset_i = (-0.1, 0.1)
+            offset_j = (0.1, -0.1)
+
+            ax.annotate("", xy=(ccd_bl_label[0] + L_ccd, ccd_bl_label[1]), xytext=ccd_bl_label,
+                        arrowprops=dict(arrowstyle="->", color="darkviolet", lw=3), zorder=20)
+            ax.annotate("", xy=(ccd_bl_label[0], ccd_bl_label[1] + L_ccd), xytext=ccd_bl_label,
+                        arrowprops=dict(arrowstyle="->", color="darkviolet", lw=3), zorder=20)
+            ax.text(ccd_bl_label[0] + L_ccd + offset_i[0], ccd_bl_label[1] + offset_i[1],
+                    "i", color="darkviolet", va="bottom", ha="left", zorder=20)
+            ax.text(ccd_bl_label[0] + offset_j[0], ccd_bl_label[1] + L_ccd + offset_j[1],
+                    "j", color="darkviolet", va="bottom", ha="left", zorder=20)
+
+        # Quadrant 48 x,y
+        if qad_bl_label is not None:
+            L_q = 0.6
+            offset_x = (-0.1, 0.1)
+            offset_y = (0.1, -0.1)
+
+            ax.annotate("", xy=(qad_bl_label[0] + L_q, qad_bl_label[1]), xytext=qad_bl_label,
+                        arrowprops=dict(arrowstyle="->", color="darkviolet", lw=3), zorder=20)
+            ax.annotate("", xy=(qad_bl_label[0], qad_bl_label[1] + L_q), xytext=qad_bl_label,
+                        arrowprops=dict(arrowstyle="->", color="darkviolet", lw=3), zorder=20)
+            ax.text(qad_bl_label[0] + L_q + offset_x[0], qad_bl_label[1] + offset_x[1],
+                    "x", color="darkviolet", va="bottom", ha="left", fontsize=10, zorder=20)
+            ax.text(qad_bl_label[0] + offset_y[0], qad_bl_label[1] + L_q + offset_y[1],
+                    "y", color="darkviolet", va="bottom", ha="left", fontsize=10, zorder=20)
+
+    ax.set_xlim(-5 + ra, 5 + ra)
+    ax.set_ylim(-5 + dec, 5 + dec)
+
     return fig
 
 # -------------- #
